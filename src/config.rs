@@ -281,11 +281,6 @@ impl Config {
             Err(_) => None,
         }
     }
-
-    /// GitHub token: env GITHUB_TOKEN, else None (reads-only adapter).
-    pub fn github_token() -> Option<String> {
-        std::env::var("GITHUB_TOKEN").ok().filter(|s| !s.is_empty())
-    }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
