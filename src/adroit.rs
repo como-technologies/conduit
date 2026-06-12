@@ -94,6 +94,13 @@ impl AdrSource {
 
     pub fn new(bin: PathBuf, dir: PathBuf, cfg: &crate::config::AdroitConfig) -> AdrSource {
         let mut ai_env = vec![
+            // adroit gates `plan` behind an explicit enable flag; conduit
+            // supplies the COMPLETE AI env (spec §Plan snapshot: the env is
+            // conduit's to provide). Without this, a fresh generation fails
+            // with "plan needs an AI provider" even though provider/model are
+            // set — stored-plan reads short-circuit before the provider and
+            // never contact it either way.
+            ("ADROIT_AI_ENABLED".to_string(), "true".to_string()),
             ("ADROIT_AI_PROVIDER".to_string(), cfg.ai_provider.clone()),
             ("ADROIT_AI_MODEL".to_string(), cfg.ai_model.clone()),
         ];
