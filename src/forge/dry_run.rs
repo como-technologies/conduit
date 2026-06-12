@@ -75,6 +75,11 @@ impl<F: Forge> DryRunForge<F> {
 
     /// Like [`DryRunForge::new`], additionally redacting the repo slug
     /// (`{owner}/{repo}` → `$REPO`) wherever it appears in recorded bodies.
+    ///
+    /// Scope of the guarantee: slug redaction applies to BODY/comment-body
+    /// fields only. Titles, heads, and label descriptions pass through
+    /// verbatim — transcript neutrality there rests on callers building them
+    /// via `contract::*` (which never embeds a repo slug).
     pub fn with_repo_slug(inner: F, slug: &str) -> DryRunForge<F> {
         let mut d = DryRunForge::new(inner);
         d.repo_slug = Some(slug.to_string());
@@ -100,6 +105,11 @@ impl<F: Forge> DryRunForge<F> {
 
     /// `$REPO`-redact a free-text field (spec: repo slug never appears in a
     /// transcript — the two demo legs target different repos).
+    ///
+    /// This is a LITERAL substring replace, not word-boundary aware: a body
+    /// naming `owner/repo-fork` with slug `owner/repo` becomes `$REPO-fork`.
+    /// Acceptable for the spike's generated bodies; don't pass slugs that
+    /// prefix other paths the caller wants preserved.
     fn redact_text(&self, text: &str) -> String {
         match &self.repo_slug {
             Some(slug) => text.replace(slug.as_str(), "$REPO"),
