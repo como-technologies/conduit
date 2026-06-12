@@ -1,0 +1,30 @@
+[package]
+name = "conduit"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Forge-neutral agentic development harness — the Adopt-stage engine of the Como TAPS loop"
+
+[dependencies]
+# ── Core — fully synchronous, no tokio (spec §Stack: poll-tick loop, one task at a time).
+# Binary-layer errors; typed thiserror enums live in the lib modules.
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+# `-o json` output, transcript JSONL, adroit/engine JSON envelopes, snapshot persistence.
+serde_json = "1"
+# Plan-snapshot integrity hash + FakeEngine's deterministic output.
+sha2 = "0.11"
+# Typed errors in the forge/store/machine/adroit layers (anyhow stays in main.rs).
+thiserror = "2"
+# Snapshot timestamps + review submitted_at.
+time = { version = "0.3", features = ["serde-human-readable", "formatting", "parsing", "macros"] }
+# conduit.toml config (not in the spec dep list, required by §Module layout src/config.rs).
+toml = "1"
+# Blocking HTTP (rustls) — only ever called through the HttpTransport seam.
+ureq = "3"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
