@@ -174,6 +174,17 @@ impl GiteaForge {
         Ok(ids)
     }
 
+    /// Current label names of an issue OR a PR — the ADR-0007 convergence
+    /// probe (Gitea's label endpoints live under /issues/{n} and accept PR
+    /// numbers).
+    fn get_labels(&self, number: u64) -> Result<Vec<String>, ForgeError> {
+        Ok(self
+            .get_paginated(&format!("issues/{number}/labels"))?
+            .iter()
+            .filter_map(|l| l.get("name").and_then(|n| n.as_str()).map(str::to_string))
+            .collect())
+    }
+
     /// Absolute, convergent label set on an issue OR a PR (Gitea's label
     /// endpoints live under /issues/{n} and accept PR numbers).
     fn put_labels(&self, number: u64, labels: &[String]) -> Result<(), ForgeError> {
@@ -454,6 +465,14 @@ impl Forge for GiteaForge {
         body: &str,
     ) -> Result<(), ForgeError> {
         self.upsert_comment(id.0, marker, body)
+    }
+
+    fn get_issue_labels(&self, id: &IssueId) -> Result<Vec<String>, ForgeError> {
+        self.get_labels(id.0)
+    }
+
+    fn get_pr_labels(&self, id: &PrId) -> Result<Vec<String>, ForgeError> {
+        self.get_labels(id.0)
     }
 
     fn set_issue_labels(&self, id: &IssueId, labels: &[String]) -> Result<(), ForgeError> {
@@ -922,6 +941,35 @@ mod tests {
             description: "trigger".into(),
         }])
         .unwrap();
+    }
+
+    /// ADR-0007 convergence probes: label reads return the forge's current
+    /// label names for issues AND PRs (Gitea's label endpoints live under
+    /// /issues/{n} and accept PR numbers).
+    #[test]
+    fn label_reads_return_current_names_for_issue_and_pr() {
+        let f = forge_with(vec![
+            (
+                "GET",
+                "/issues/5/labels",
+                200,
+                r#"[{"id": 1, "name": "adr:ADR-0003"}, {"id": 2, "name": "discuss"}]"#.into(),
+            ),
+            (
+                "GET",
+                "/issues/9/labels",
+                200,
+                r#"[{"id": 3, "name": "effort:1-super-quick"}]"#.into(),
+            ),
+        ]);
+        assert_eq!(
+            f.get_issue_labels(&IssueId(5)).unwrap(),
+            vec!["adr:ADR-0003".to_string(), "discuss".to_string()]
+        );
+        assert_eq!(
+            f.get_pr_labels(&PrId(9)).unwrap(),
+            vec!["effort:1-super-quick".to_string()]
+        );
     }
 
     #[test]

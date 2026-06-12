@@ -328,6 +328,32 @@ impl Forge for FakeForge {
         Ok(None)
     }
 
+    /// ADR-0007 convergence probe: stored label state, 404 on unknown ids
+    /// (real-adapter parity).
+    fn get_issue_labels(&self, id: &IssueId) -> Result<Vec<String>, ForgeError> {
+        let s = self.state.lock().expect("FakeForge lock");
+        s.issues
+            .iter()
+            .find(|(iid, _, _)| iid == id)
+            .map(|(_, new_issue, _)| new_issue.labels.clone())
+            .ok_or_else(|| ForgeError::Api {
+                status: 404,
+                message: format!("issue {} not found", id.0),
+            })
+    }
+
+    fn get_pr_labels(&self, id: &PrId) -> Result<Vec<String>, ForgeError> {
+        let s = self.state.lock().expect("FakeForge lock");
+        s.prs
+            .iter()
+            .find(|(pid, _, _)| pid == id)
+            .map(|(_, draft, _)| draft.labels.clone())
+            .ok_or_else(|| ForgeError::Api {
+                status: 404,
+                message: format!("PR {} not found", id.0),
+            })
+    }
+
     fn ensure_labels(&self, labels: &[LabelSpec]) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
         s.check_fail("ensure_labels")?;
@@ -500,6 +526,53 @@ mod tests {
         let pr = snap.prs.iter().find(|p| p.id == pr_id);
         assert!(pr.is_some(), "closed PR must appear in derived snapshot");
         assert!(pr.unwrap().closed, "closed PR must have closed=true");
+    }
+
+    /// ADR-0007 convergence probes: label reads reflect stored state and
+    /// 404 on unknown ids (real-adapter parity).
+    #[test]
+    fn label_reads_reflect_stored_state_and_404_unknown() {
+        let forge = FakeForge::new();
+        let issue = forge
+            .create_issue(&super::NewIssue {
+                title: "t".into(),
+                body: "b".into(),
+                labels: vec!["adr:ADR-0001".into(), "discuss".into()],
+            })
+            .unwrap();
+        assert_eq!(
+            forge.get_issue_labels(&issue).unwrap(),
+            vec!["adr:ADR-0001".to_string(), "discuss".to_string()]
+        );
+        forge
+            .set_issue_labels(&issue, &["conduit:failed".into()])
+            .unwrap();
+        assert_eq!(
+            forge.get_issue_labels(&issue).unwrap(),
+            vec!["conduit:failed".to_string()]
+        );
+        let pr = forge
+            .open_pr(&PrDraft {
+                head: "conduit/adr-0001/x".into(),
+                base: "main".into(),
+                title: "p".into(),
+                body: "".into(),
+                labels: vec!["effort:1-super-quick".into()],
+            })
+            .unwrap();
+        assert_eq!(
+            forge.get_pr_labels(&pr).unwrap(),
+            vec!["effort:1-super-quick".to_string()]
+        );
+        for err in [
+            forge.get_issue_labels(&IssueId(999_999)).unwrap_err(),
+            forge.get_pr_labels(&PrId(999_999)).unwrap_err(),
+        ] {
+            let ForgeError::Api { status, .. } = err else {
+                panic!("expected Api 404, got {err:?}");
+            };
+            assert_eq!(status, 404);
+        }
     }
 
     /// An open PR must appear with closed=false in the derived snapshot.

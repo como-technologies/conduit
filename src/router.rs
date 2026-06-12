@@ -351,17 +351,19 @@ impl Router<'_> {
             }
             Action::ApplyPrLabels => {
                 let pr = pr_id(record)?;
-                // Exactly one effort label, structurally: the set is absolute,
-                // so the other four are absent by construction (spec §The
-                // tuesday contract).
-                self.forge.set_pr_labels(
-                    &pr,
-                    &crate::payload::pr_label_set(
-                        &record.adr_reference,
-                        record.work_ms,
-                        &self.config.effort,
-                    ),
-                )?;
+                // Namespace-scoped convergence (ADR-0007): read current →
+                // converge → absolute write. Exactly one effort label,
+                // structurally — the owned subset is absolute, so the other
+                // four are absent by construction (spec §The tuesday
+                // contract) — while unprefixed human labels pass through.
+                let desired = crate::payload::pr_label_set(
+                    &record.adr_reference,
+                    record.work_ms,
+                    &self.config.effort,
+                );
+                let current = self.forge.get_pr_labels(&pr)?;
+                self.forge
+                    .set_pr_labels(&pr, &crate::labels::converge(&current, &desired))?;
                 Ok(None)
             }
             Action::LinkComment => {
@@ -388,7 +390,12 @@ impl Router<'_> {
                 Ok(None)
             }
             Action::SetIssueLabels { labels } => {
-                self.forge.set_issue_labels(&issue_id(record)?, labels)?;
+                // ADR-0007: the machine's label set is the DESIRED OWNED set;
+                // unprefixed human labels on the issue survive the write.
+                let issue = issue_id(record)?;
+                let current = self.forge.get_issue_labels(&issue)?;
+                self.forge
+                    .set_issue_labels(&issue, &crate::labels::converge(&current, labels))?;
                 Ok(None)
             }
             Action::CloseIssue { comment } => {

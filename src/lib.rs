@@ -11,6 +11,7 @@ pub mod engine;
 pub mod forge;
 pub mod git;
 pub mod hash;
+pub mod labels;
 pub mod machine;
 pub mod payload;
 pub mod proc;

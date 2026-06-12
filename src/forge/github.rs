@@ -457,6 +457,20 @@ impl Forge for GitHubForge {
         self.upsert_comment(id.0, marker, body)
     }
 
+    /// ADR-0007 convergence probe: current label names. The
+    /// /issues/{n}/labels endpoint accepts PR numbers too.
+    fn get_issue_labels(&self, id: &IssueId) -> Result<Vec<String>, ForgeError> {
+        Ok(self
+            .get_paginated(&format!("issues/{}/labels", id.0))?
+            .iter()
+            .filter_map(|l| l.get("name").and_then(|n| n.as_str()).map(str::to_string))
+            .collect())
+    }
+
+    fn get_pr_labels(&self, id: &PrId) -> Result<Vec<String>, ForgeError> {
+        self.get_issue_labels(&IssueId(id.0))
+    }
+
     /// PUT replaces the whole label set (absolute, convergent).
     fn set_issue_labels(&self, id: &IssueId, labels: &[String]) -> Result<(), ForgeError> {
         self.call(
@@ -1115,6 +1129,34 @@ mod tests {
             .unwrap();
         let body = last_body(&seen);
         assert_eq!(body["labels"], json!(["adr:ADR-0003", "conduit:run"]));
+    }
+
+    /// ADR-0007 convergence probes: label reads return current names for
+    /// issues AND PRs (the /issues/{n}/labels endpoint accepts PR numbers).
+    #[test]
+    fn label_reads_return_current_names_for_issue_and_pr() {
+        let (f, _) = forge_with(vec![
+            (
+                "GET",
+                "/issues/5/labels?page=1",
+                200,
+                r#"[{"id": 1, "name": "adr:ADR-0003"}, {"id": 2, "name": "discuss"}]"#.into(),
+            ),
+            (
+                "GET",
+                "/issues/9/labels?page=1",
+                200,
+                r#"[{"id": 3, "name": "effort:1-super-quick"}]"#.into(),
+            ),
+        ]);
+        assert_eq!(
+            f.get_issue_labels(&IssueId(5)).unwrap(),
+            vec!["adr:ADR-0003".to_string(), "discuss".to_string()]
+        );
+        assert_eq!(
+            f.get_pr_labels(&PrId(9)).unwrap(),
+            vec!["effort:1-super-quick".to_string()]
+        );
     }
 
     #[test]

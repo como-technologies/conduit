@@ -42,13 +42,17 @@ pub enum Action {
     /// Open the PR with full tuesday tagging. Probe: `find_open_pr_by_head`.
     OpenPr,
     /// Convergent set of PR labels: exactly one effort label (recomputed from
-    /// cumulative work_ms) + `adr:<reference>`. Safe to re-run.
+    /// cumulative work_ms) + `adr:<reference>`. Safe to re-run. The router
+    /// converges namespace-scoped (ADR-0007): the set is absolute within the
+    /// owned prefixes; unprefixed human labels pass through.
     ApplyPrLabels,
     /// Upsert the PR link onto the issue (marker = contract::task_marker).
     LinkComment,
     /// Failure comment with log tail (marker upsert), on the issue.
     FailureComment { reason: String, log_tail: String },
-    /// Convergent set of issue labels (e.g. swap conduit:run -> conduit:failed).
+    /// The DESIRED OWNED issue label set (e.g. swap conduit:run ->
+    /// conduit:failed). The router converges namespace-scoped (ADR-0007):
+    /// stale owned labels go, unprefixed human labels survive.
     SetIssueLabels { labels: Vec<String> },
     /// Close the issue with a final comment (completion w/ merge sha, or abandonment).
     CloseIssue { comment: String },

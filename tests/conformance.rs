@@ -78,6 +78,37 @@ fn run_conformance(forge: &dyn Forge, tag: &str, mutations: Mutations) {
         .set_issue_labels(&issue, &[format!("conformance:{tag}")])
         .unwrap();
 
+    // 4b. Namespace-scoped label convergence (ADR-0007), composed through
+    //     the adapter: read current labels → converge with the shared layer →
+    //     absolute write. `conformance:{tag}` is unprefixed (human property
+    //     from conduit's point of view) and must survive every cycle, while
+    //     the owned namespaces converge absolutely. On a DryRun leg the reads
+    //     resolve through the recorded-label overlay — the probes must keep
+    //     working even though the writes never reached the real forge.
+    let human = format!("conformance:{tag}");
+    let current = forge.get_issue_labels(&issue).unwrap();
+    assert!(
+        current.contains(&human),
+        "unprefixed label visible to the convergence read: {current:?}"
+    );
+    let converged = conduit::labels::converge(&current, &["conduit:run".to_string()]);
+    forge.set_issue_labels(&issue, &converged).unwrap();
+    // The owned namespace is absolute: the run -> failed swap drops the
+    // stale owned label and never touches the human one.
+    let current = forge.get_issue_labels(&issue).unwrap();
+    let converged = conduit::labels::converge(&current, &["conduit:failed".to_string()]);
+    forge.set_issue_labels(&issue, &converged).unwrap();
+    let after = forge.get_issue_labels(&issue).unwrap();
+    assert!(
+        after.contains(&human),
+        "human label must survive convergence: {after:?}"
+    );
+    assert!(after.contains(&"conduit:failed".to_string()), "{after:?}");
+    assert!(
+        !after.contains(&"conduit:run".to_string()),
+        "stale owned label must be removed: {after:?}"
+    );
+
     // 5. close_issue.
     forge.close_issue(&issue).unwrap();
 
@@ -161,6 +192,30 @@ fn run_conformance(forge: &dyn Forge, tag: &str, mutations: Mutations) {
             &["effort:2-not-long".to_string(), "adr:ADR-0001".to_string()],
         )
         .unwrap();
+
+    // 7e-bis. PR-side convergence (ADR-0007): a human-added unprefixed label
+    //     survives the effort relabel, and exactly one effort:* label remains.
+    let mut with_human = forge.get_pr_labels(&pr_id).unwrap();
+    with_human.push(human.clone()); // the human UI add
+    forge.set_pr_labels(&pr_id, &with_human).unwrap();
+    let current = forge.get_pr_labels(&pr_id).unwrap();
+    let converged = conduit::labels::converge(
+        &current,
+        &["effort:3-average".to_string(), "adr:ADR-0001".to_string()],
+    );
+    forge.set_pr_labels(&pr_id, &converged).unwrap();
+    let after = forge.get_pr_labels(&pr_id).unwrap();
+    assert!(
+        after.contains(&human),
+        "human PR label must survive the effort relabel: {after:?}"
+    );
+    assert_eq!(
+        after.iter().filter(|l| l.starts_with("effort:")).count(),
+        1,
+        "owned namespace stays absolute: {after:?}"
+    );
+    assert!(after.contains(&"effort:3-average".to_string()), "{after:?}");
+    assert!(after.contains(&"adr:ADR-0001".to_string()), "{after:?}");
 
     // 7f. fetch_snapshot after PR open must show the PR with the correct head,
     //     title, and body (Real legs only — snapshots delegate to live reads,
@@ -363,10 +418,11 @@ fn github_recorded_fixtures_conform() {
     let t = forge.transcript();
     assert_eq!(
         t.len(),
-        13,
-        "all 13 suite mutations recorded (2 ensure_labels, create_issue, \
-         2 issue upserts, 2 set_issue_labels, close_issue, open_pr, \
-         2 PR upserts, 2 set_pr_labels): {t:#?}"
+        17,
+        "all 17 suite mutations recorded (2 ensure_labels, create_issue, \
+         2 issue upserts, 2 set_issue_labels, 2 convergence set_issue_labels, \
+         close_issue, open_pr, 2 PR upserts, 2 set_pr_labels, \
+         2 convergence set_pr_labels): {t:#?}"
     );
     for line in &t {
         let v: serde_json::Value = serde_json::from_str(line).expect("transcript line is JSON");

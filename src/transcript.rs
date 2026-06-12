@@ -468,14 +468,14 @@ fn execute(
         }
         Action::ApplyPrLabels => {
             let pr = pr_id(record)?;
-            emitter.set_pr_labels(
-                pr,
-                &crate::payload::pr_label_set(
-                    &record.adr_reference,
-                    record.work_ms,
-                    &config.effort,
-                ),
-            )
+            // ADR-0007 convergence, mirroring Router::execute: the DryRun
+            // leg's read resolves through its label overlay, the execute
+            // leg's through the live forge — same final set, byte-identical
+            // lines.
+            let desired =
+                crate::payload::pr_label_set(&record.adr_reference, record.work_ms, &config.effort);
+            let current = emitter.forge.get_pr_labels(&pr)?;
+            emitter.set_pr_labels(pr, &crate::labels::converge(&current, &desired))
         }
         Action::LinkComment => {
             let issue = issue_id(record)?;
@@ -497,7 +497,12 @@ fn execute(
                 crate::payload::failure_comment(record.attempt, reason, log_tail, &record.id);
             emitter.upsert_issue_comment(issue, &marker, &body)
         }
-        Action::SetIssueLabels { labels } => emitter.set_issue_labels(issue_id(record)?, labels),
+        Action::SetIssueLabels { labels } => {
+            // ADR-0007 convergence, mirroring Router::execute.
+            let issue = issue_id(record)?;
+            let current = emitter.forge.get_issue_labels(&issue)?;
+            emitter.set_issue_labels(issue, &crate::labels::converge(&current, labels))
+        }
         Action::CloseIssue { comment } => {
             let issue = issue_id(record)?;
             emitter.upsert_issue_comment(issue, &marker, comment)?;
@@ -822,6 +827,8 @@ mod tests {
             "fetch_snapshot",
             "find_open_pr_by_head",
             "find_issue_by_marker",
+            "get_issue_labels",
+            "get_pr_labels",
         ];
         for read in READS {
             assert!(

@@ -34,6 +34,11 @@ struct DryRunState {
     redactor: Redactor,
     /// Probe overlay: (head branch, synthetic id) per recorded open_pr.
     open_prs: Vec<(String, PrId)>,
+    /// Label overlay (ADR-0007 convergence probes): the label state of
+    /// objects this dry run created/labeled — the live forge never saw them,
+    /// so the read must resolve here, exactly like the open-PR probe.
+    issue_labels: Vec<(IssueId, Vec<String>)>,
+    pr_labels: Vec<(PrId, Vec<String>)>,
     next_issue: u64,
     next_pr: u64,
 }
@@ -59,6 +64,8 @@ impl<F: Forge> DryRunForge<F> {
                 lines: Vec::new(),
                 redactor: Redactor::new(None),
                 open_prs: Vec::new(),
+                issue_labels: Vec::new(),
+                pr_labels: Vec::new(),
                 next_issue: SYNTHETIC_ID_BASE + 1,
                 next_pr: SYNTHETIC_ID_BASE + 1,
             }),
@@ -125,6 +132,29 @@ impl<F: Forge> Forge for DryRunForge<F> {
         self.inner.find_issue_by_marker(marker)
     }
 
+    /// Overlay first (ADR-0007): labels of objects this dry run
+    /// created/labeled resolve from the recorded state; unrecorded ids
+    /// delegate to the live read.
+    fn get_issue_labels(&self, id: &IssueId) -> Result<Vec<String>, ForgeError> {
+        {
+            let state = self.state.lock().expect("DryRunForge lock");
+            if let Some((_, labels)) = state.issue_labels.iter().find(|(iid, _)| iid == id) {
+                return Ok(labels.clone());
+            }
+        }
+        self.inner.get_issue_labels(id)
+    }
+
+    fn get_pr_labels(&self, id: &PrId) -> Result<Vec<String>, ForgeError> {
+        {
+            let state = self.state.lock().expect("DryRunForge lock");
+            if let Some((_, labels)) = state.pr_labels.iter().find(|(pid, _)| pid == id) {
+                return Ok(labels.clone());
+            }
+        }
+        self.inner.get_pr_labels(id)
+    }
+
     // -- mutations: recorded, never executed --------------------------------
 
     fn ensure_labels(&self, labels: &[LabelSpec]) -> Result<(), ForgeError> {
@@ -137,6 +167,7 @@ impl<F: Forge> Forge for DryRunForge<F> {
         let mut state = self.state.lock().expect("DryRunForge lock");
         let id = IssueId(state.next_issue);
         state.next_issue += 1;
+        state.issue_labels.push((id, new.labels.clone()));
         // normalize_action registers the synthetic id: first-seen order is
         // mutation order.
         state.record(&ForgeCall::CreateIssue { new, id });
@@ -160,6 +191,10 @@ impl<F: Forge> Forge for DryRunForge<F> {
 
     fn set_issue_labels(&self, id: &IssueId, labels: &[String]) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
+        match state.issue_labels.iter_mut().find(|(iid, _)| iid == id) {
+            Some((_, stored)) => *stored = labels.to_vec(),
+            None => state.issue_labels.push((*id, labels.to_vec())),
+        }
         state.record(&ForgeCall::SetIssueLabels { id: *id, labels });
         Ok(())
     }
@@ -175,6 +210,7 @@ impl<F: Forge> Forge for DryRunForge<F> {
         let id = PrId(state.next_pr);
         state.next_pr += 1;
         state.open_prs.push((draft.head.clone(), id));
+        state.pr_labels.push((id, draft.labels.clone()));
         state.record(&ForgeCall::OpenPr { draft, id });
         Ok(id)
     }
@@ -191,6 +227,10 @@ impl<F: Forge> Forge for DryRunForge<F> {
 
     fn set_pr_labels(&self, id: &PrId, labels: &[String]) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
+        match state.pr_labels.iter_mut().find(|(pid, _)| pid == id) {
+            Some((_, stored)) => *stored = labels.to_vec(),
+            None => state.pr_labels.push((*id, labels.to_vec())),
+        }
         state.record(&ForgeCall::SetPrLabels { id: *id, labels });
         Ok(())
     }
@@ -346,6 +386,52 @@ mod tests {
             d.find_open_pr_by_head("conduit/none/missing").unwrap(),
             None
         );
+    }
+
+    /// ADR-0007 convergence probes on the record-only leg: label reads
+    /// resolve through the overlay for objects this dry run created/labeled
+    /// (the live forge never saw them); unrecorded ids delegate to the inner
+    /// forge.
+    #[test]
+    fn label_reads_consult_the_overlay_for_recorded_objects() {
+        let d = dry();
+        let issue = d
+            .create_issue(&NewIssue {
+                title: "t".into(),
+                body: "".into(),
+                labels: vec!["adr:ADR-0001".into()],
+            })
+            .unwrap();
+        assert_eq!(
+            d.get_issue_labels(&issue).unwrap(),
+            vec!["adr:ADR-0001".to_string()]
+        );
+        d.set_issue_labels(&issue, &["conformance:x".into(), "conduit:run".into()])
+            .unwrap();
+        assert_eq!(
+            d.get_issue_labels(&issue).unwrap(),
+            vec!["conformance:x".to_string(), "conduit:run".to_string()]
+        );
+        let pr = d
+            .open_pr(&PrDraft {
+                title: "p".into(),
+                body: "".into(),
+                head: "conduit/adr-0001/x".into(),
+                base: "main".into(),
+                labels: vec!["effort:1-super-quick".into()],
+            })
+            .unwrap();
+        assert_eq!(
+            d.get_pr_labels(&pr).unwrap(),
+            vec!["effort:1-super-quick".to_string()]
+        );
+        d.set_pr_labels(&pr, &["effort:2-not-long".into()]).unwrap();
+        assert_eq!(
+            d.get_pr_labels(&pr).unwrap(),
+            vec!["effort:2-not-long".to_string()]
+        );
+        // Unrecorded ids fall through to the inner forge (FakeForge: 404).
+        assert!(d.get_issue_labels(&crate::task::IssueId(424_242)).is_err());
     }
 
     #[test]

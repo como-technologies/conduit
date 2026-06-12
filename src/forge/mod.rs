@@ -184,6 +184,11 @@ pub trait Forge {
     // idempotency probes (reads)
     fn find_open_pr_by_head(&self, branch: &str) -> Result<Option<PrId>, ForgeError>;
     fn find_issue_by_marker(&self, marker: &str) -> Result<Option<IssueId>, ForgeError>;
+    // label-convergence probes (reads, ADR-0007): current label names of one
+    // object — the read half of read→converge→absolute-write. Label writes
+    // stay absolute; ownership scoping lives in crate::labels.
+    fn get_issue_labels(&self, id: &IssueId) -> Result<Vec<String>, ForgeError>;
+    fn get_pr_labels(&self, id: &PrId) -> Result<Vec<String>, ForgeError>;
     // actions out — NO merge method exists: humans merge in the forge UI
     fn ensure_labels(&self, labels: &[LabelSpec]) -> Result<(), ForgeError>;
     fn create_issue(&self, new: &NewIssue) -> Result<IssueId, ForgeError>;

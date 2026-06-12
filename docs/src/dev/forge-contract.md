@@ -97,7 +97,7 @@ crash-replay test:
 | `open_pr` | `find_open_pr_by_head(branch)` — adopts an existing PR instead of duplicating |
 | push branch | `git ls-remote` sha compare before push |
 | comments | marker upsert: find the comment carrying the marker, PATCH it, else POST |
-| labels | convergent set — `set_*_labels` is absolute, not additive; re-running converges |
+| labels | convergent set — `set_*_labels` is absolute, not additive; re-running converges. Writes are namespace-scoped (ADR-0007): the caller reads current labels (`get_*_labels`), converges through `labels::converge` — owned prefixes (`effort:`/`adr:`/`conduit:`) absolute, unprefixed human labels preserved — then writes |
 
 ## Endpoint maps
 

@@ -750,6 +750,62 @@ fn crash_replay_labels_converge() {
     assert!(sets[1].contains(&"adr:ADR-0003".to_string()));
 }
 
+/// ADR-0007 namespace-scoped convergence: unprefixed human labels survive
+/// every conduit label write, while the owned namespaces (effort:/adr:/
+/// conduit:) stay absolute — stale owned labels replaced, missing added.
+#[test]
+fn human_labels_survive_conduit_label_convergence() {
+    let mut rig = Rig::new();
+    // A human annotates the issue in the forge UI (absolute set = the
+    // forge-side state a real UI label add produces).
+    rig.forge
+        .set_issue_labels(
+            &IssueId(1),
+            &["adr:ADR-0003".to_string(), "priority-high".to_string()],
+        )
+        .unwrap();
+
+    // Engine failure swaps conduit:run -> conduit:failed on the issue: the
+    // human label must survive the swap.
+    rig.engine.mode = FakeMode::Fail;
+    rig.label_and_tick("conduit:run");
+    assert_eq!(rig.record().state, TaskState::Failed);
+    let labels = rig.forge.get_issue_labels(&IssueId(1)).unwrap();
+    assert!(
+        labels.contains(&"priority-high".to_string()),
+        "human label wiped by the failure relabel: {labels:?}"
+    );
+    assert!(labels.contains(&"conduit:failed".to_string()), "{labels:?}");
+
+    // Retry to InReview, then a human annotates the PR; the effort relabel
+    // after the revision round must preserve it and keep exactly one
+    // effort:* label.
+    rig.set_issue_labels(&["conduit:failed", "priority-high"]);
+    rig.tick_ok();
+    rig.engine.mode = FakeMode::Complete;
+    rig.label_and_tick("conduit:run");
+    assert_eq!(rig.record().state, TaskState::InReview);
+    let pr = rig.record().pr.expect("PR opened");
+    let mut pr_labels = rig.forge.get_pr_labels(&pr).unwrap();
+    pr_labels.push("discuss".to_string()); // the human UI add
+    rig.forge.set_pr_labels(&pr, &pr_labels).unwrap();
+
+    rig.pr_into_current();
+    rig.add_review("r1", ReviewVerdict::ChangesRequested, "tweak");
+    rig.tick_ok();
+    let labels = rig.forge.get_pr_labels(&pr).unwrap();
+    assert!(
+        labels.contains(&"discuss".to_string()),
+        "human PR label wiped by the effort relabel: {labels:?}"
+    );
+    assert_eq!(
+        labels.iter().filter(|l| l.starts_with("effort:")).count(),
+        1,
+        "owned namespace stays absolute: {labels:?}"
+    );
+    assert!(labels.contains(&"adr:ADR-0003".to_string()));
+}
+
 #[test]
 fn cursor_advances_only_after_actions_complete() {
     let rig = Rig::new();
