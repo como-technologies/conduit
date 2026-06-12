@@ -1,4 +1,6 @@
 # Pinned adroit rev consumed by `just init-adroit`.
-# f8547518: plan-persistence tip (stored-plan deterministic reads; ADR-0008).
-# Supersedes the original plan-spec pin f59a5f28 per referee sequencing.
-f8547518e090414531793d0fd4e749d48a559696
+# b57550ef: annotated tag v0.2.0 on adroit merged main (commit aade23bd) —
+#   stored plans, provenance, sanitizer + lint hardening (suite iteration 2).
+# Single pin advance per the iteration-2 referee (I10, conflict-1 ruling);
+# supersedes the plan-persistence pin f8547518.
+b57550efe41c55feb4d4ab005a5c208549955a27
