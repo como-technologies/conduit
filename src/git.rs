@@ -137,6 +137,19 @@ pub fn create_workspace(
 /// the task doc it writes in any subdirectory must never land in a PR
 /// (spec §Committing — "never lands" is absolute).
 pub fn commit_all_except_task_file(ws: &Path, message: &str) -> Result<bool, GitError> {
+    commit_all_except_task_file_with_env(ws, message, &[])
+}
+
+/// [`commit_all_except_task_file`] with extra env on the `git commit` child —
+/// the transcript demo pins GIT_AUTHOR_DATE/GIT_COMMITTER_DATE so a rerun
+/// reproduces the identical sha (deterministic FakeEngine bytes + pinned
+/// dates) and its re-push probe becomes a no-op. Production (router) never
+/// pins dates: tuesday measures real PRs with real timestamps.
+pub fn commit_all_except_task_file_with_env(
+    ws: &Path,
+    message: &str,
+    extra_env: &[(&str, &str)],
+) -> Result<bool, GitError> {
     match std::fs::remove_file(ws.join(".conduit-task.md")) {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -163,7 +176,9 @@ pub fn commit_all_except_task_file(ws: &Path, message: &str) -> Result<bool, Git
             });
         }
     }
-    run_git_ok(Some(ws), &IDENTITY, &["commit", "-m", message])?;
+    let mut envs: Vec<(&str, &str)> = IDENTITY.to_vec();
+    envs.extend_from_slice(extra_env);
+    run_git_ok(Some(ws), &envs, &["commit", "-m", message])?;
     Ok(true)
 }
 

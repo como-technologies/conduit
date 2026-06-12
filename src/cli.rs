@@ -426,7 +426,7 @@ pub fn tuesday_checks(record: &TaskRecord, pr: &PrSnapshot) -> Vec<Check> {
 
     // ^\[ADR-\d{4}\] ⁠ on the PR title.
     checks.push(Check {
-        name: "title_prefix",
+        name: contract::CHECK_TITLE_PREFIX,
         pass: title_has_adr_prefix(&pr.title),
         detail: format!("title {:?} (want ^\\[ADR-dddd\\] )", pr.title),
     });
@@ -435,7 +435,7 @@ pub fn tuesday_checks(record: &TaskRecord, pr: &PrSnapshot) -> Vec<Check> {
     let trailer = contract::body_trailer(&record.adr_reference);
     let last_line = pr.body.trim_end().lines().last().unwrap_or_default();
     checks.push(Check {
-        name: "trailer_final_line",
+        name: contract::CHECK_TRAILER_FINAL_LINE,
         pass: last_line == trailer,
         detail: format!("final body line {last_line:?} (want {trailer:?})"),
     });
@@ -447,7 +447,7 @@ pub fn tuesday_checks(record: &TaskRecord, pr: &PrSnapshot) -> Vec<Check> {
         .filter(|l| l.starts_with("effort:"))
         .collect();
     checks.push(Check {
-        name: "exactly_one_effort_label",
+        name: contract::CHECK_EXACTLY_ONE_EFFORT,
         pass: efforts.len() == 1 && contract::EFFORT_LABELS.contains(&efforts[0].as_str()),
         detail: format!("effort labels {efforts:?} (want exactly one from the closed set)"),
     });
@@ -455,14 +455,14 @@ pub fn tuesday_checks(record: &TaskRecord, pr: &PrSnapshot) -> Vec<Check> {
     // adr:<reference> label present.
     let adr_label = contract::adr_label(&record.adr_reference);
     checks.push(Check {
-        name: "adr_label_present",
+        name: contract::CHECK_ADR_LABEL_PRESENT,
         pass: pr.labels.contains(&adr_label),
         detail: format!("labels {:?} (want {adr_label:?})", pr.labels),
     });
 
     // ^conduit/adr-\d{4}/[a-z0-9-]+$ on the head branch.
     checks.push(Check {
-        name: "branch_shape",
+        name: contract::CHECK_BRANCH_SHAPE,
         pass: branch_is_conduit_shaped(&pr.head_branch),
         detail: format!(
             "head branch {:?} (want conduit/adr-dddd/<slug>)",
@@ -472,7 +472,7 @@ pub fn tuesday_checks(record: &TaskRecord, pr: &PrSnapshot) -> Vec<Check> {
 
     // Never adroit's namespace.
     checks.push(Check {
-        name: "never_adr_namespace",
+        name: contract::CHECK_NEVER_ADR_NAMESPACE,
         pass: !pr.head_branch.starts_with("adr/"),
         detail: format!("head branch {:?} (must never start adr/)", pr.head_branch),
     });
@@ -602,12 +602,12 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "title_prefix",
-                "trailer_final_line",
-                "exactly_one_effort_label",
-                "adr_label_present",
-                "branch_shape",
-                "never_adr_namespace",
+                contract::CHECK_TITLE_PREFIX,
+                contract::CHECK_TRAILER_FINAL_LINE,
+                contract::CHECK_EXACTLY_ONE_EFFORT,
+                contract::CHECK_ADR_LABEL_PRESENT,
+                contract::CHECK_BRANCH_SHAPE,
+                contract::CHECK_NEVER_ADR_NAMESPACE,
             ]
         );
         assert!(
@@ -628,19 +628,19 @@ mod tests {
 
         let mut pr = conforming_pr();
         pr.title = "ADR-0003: no bracket".into();
-        assert_eq!(fail_of(pr), vec!["title_prefix"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_TITLE_PREFIX]);
 
         let mut pr = conforming_pr();
         pr.title = "[ADR-003] three digits".into();
-        assert_eq!(fail_of(pr), vec!["title_prefix"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_TITLE_PREFIX]);
 
         let mut pr = conforming_pr();
         pr.body = format!("{}\n\ntrailing prose", pr.body);
-        assert_eq!(fail_of(pr), vec!["trailer_final_line"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_TRAILER_FINAL_LINE]);
 
         let mut pr = conforming_pr();
         pr.labels = vec!["adr:ADR-0003".into()]; // zero effort labels
-        assert_eq!(fail_of(pr), vec!["exactly_one_effort_label"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_EXACTLY_ONE_EFFORT]);
 
         let mut pr = conforming_pr();
         pr.labels = vec![
@@ -648,27 +648,33 @@ mod tests {
             "effort:3-average".into(),
             "adr:ADR-0003".into(),
         ];
-        assert_eq!(fail_of(pr), vec!["exactly_one_effort_label"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_EXACTLY_ONE_EFFORT]);
 
         let mut pr = conforming_pr();
         pr.labels = vec!["effort:9-bogus".into(), "adr:ADR-0003".into()];
         assert_eq!(
             fail_of(pr),
-            vec!["exactly_one_effort_label"],
+            vec![contract::CHECK_EXACTLY_ONE_EFFORT],
             "an effort label outside the closed set must fail"
         );
 
         let mut pr = conforming_pr();
         pr.labels = vec!["effort:1-super-quick".into()];
-        assert_eq!(fail_of(pr), vec!["adr_label_present"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_ADR_LABEL_PRESENT]);
 
         let mut pr = conforming_pr();
         pr.head_branch = "conduit/adr-3/short".into();
-        assert_eq!(fail_of(pr), vec!["branch_shape"]);
+        assert_eq!(fail_of(pr), vec![contract::CHECK_BRANCH_SHAPE]);
 
         let mut pr = conforming_pr();
         pr.head_branch = "adr/0003-sneaky".into();
-        assert_eq!(fail_of(pr), vec!["branch_shape", "never_adr_namespace"]);
+        assert_eq!(
+            fail_of(pr),
+            vec![
+                contract::CHECK_BRANCH_SHAPE,
+                contract::CHECK_NEVER_ADR_NAMESPACE
+            ]
+        );
     }
 
     /// GAP C: verify-report assembly — the pure path.
@@ -690,7 +696,7 @@ mod tests {
         );
         let failed: Vec<&str> = checks.iter().filter(|c| !c.pass).map(|c| c.name).collect();
         assert!(
-            failed.contains(&"title_prefix"),
+            failed.contains(&contract::CHECK_TITLE_PREFIX),
             "title_prefix violation must fail: {failed:?}"
         );
     }
@@ -703,7 +709,7 @@ mod tests {
         assert!(
             checks
                 .iter()
-                .find(|c| c.name == "trailer_final_line")
+                .find(|c| c.name == contract::CHECK_TRAILER_FINAL_LINE)
                 .unwrap()
                 .pass,
             "forge-appended trailing whitespace must not fail the trailer"

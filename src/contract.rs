@@ -85,6 +85,15 @@ pub fn body_trailer(reference: &str) -> String {
     format!("Adr-Reference: {reference}")
 }
 
+/// The six `conduit verify` check names — FIXED identifiers tuesday-side
+/// tooling keys on. Consts so a typo is a compile error, not a silent drift.
+pub const CHECK_TITLE_PREFIX: &str = "title_prefix";
+pub const CHECK_TRAILER_FINAL_LINE: &str = "trailer_final_line";
+pub const CHECK_EXACTLY_ONE_EFFORT: &str = "exactly_one_effort_label";
+pub const CHECK_ADR_LABEL_PRESENT: &str = "adr_label_present";
+pub const CHECK_BRANCH_SHAPE: &str = "branch_shape";
+pub const CHECK_NEVER_ADR_NAMESPACE: &str = "never_adr_namespace";
+
 /// Body + blank line + trailer; the trailer is ALWAYS the final line.
 ///
 /// Callers MUST NOT pre-include the trailer in `body` — the function does

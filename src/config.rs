@@ -235,21 +235,26 @@ impl Config {
         Ok(config)
     }
 
-    /// Validate that effort thresholds are strictly increasing:
-    /// super_quick < not_long < average < a_while.
+    /// Validate that effort thresholds are strictly increasing
+    /// (super_quick < not_long < average < a_while) and the poll interval
+    /// is non-zero.
     pub(crate) fn validate(&self) -> Result<(), ConfigError> {
         let e = &self.effort;
-        if e.super_quick_max_ms < e.not_long_max_ms
+        let increasing = e.super_quick_max_ms < e.not_long_max_ms
             && e.not_long_max_ms < e.average_max_ms
-            && e.average_max_ms < e.a_while_max_ms
-        {
-            Ok(())
-        } else {
-            Err(ConfigError::Validation(format!(
+            && e.average_max_ms < e.a_while_max_ms;
+        if !increasing {
+            return Err(ConfigError::Validation(format!(
                 "[effort] thresholds must be strictly increasing: {}<{}<{}<{}",
                 e.super_quick_max_ms, e.not_long_max_ms, e.average_max_ms, e.a_while_max_ms
-            )))
+            )));
         }
+        if self.poll.interval_secs == 0 {
+            return Err(ConfigError::Validation(
+                "[poll] interval_secs must be >= 1 (0 would spin the daemon hot)".into(),
+            ));
+        }
+        Ok(())
     }
 
     /// Gitea token: env CONDUIT_GITEA_TOKEN, else `.secrets/conduit-bot.token`

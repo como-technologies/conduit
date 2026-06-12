@@ -100,6 +100,11 @@ fn redact_labels(labels: &[String]) -> Vec<String> {
 /// `CreateIssue`/`OpenPr` carry the forge-assigned (or synthesized) id so the
 /// placeholder table registers it in mutation order, but the id never appears
 /// in the line itself.
+///
+/// MAINTENANCE OBLIGATION: this enum must cover EVERY mutation on the `Forge`
+/// trait. Adding a trait mutation without (a) a variant here, (b) a
+/// `normalize_action` arm, and (c) a `DryRunForge` record call silently
+/// bypasses the transcript — nothing enforces the trio at compile time.
 pub enum ForgeCall<'a> {
     EnsureLabels {
         labels: &'a [LabelSpec],
@@ -417,7 +422,16 @@ fn execute(
             };
             let ws = g.workspace_root.join(&record.id);
             let message = contract::commit_message(&record.adr_reference, &record.title);
-            crate::git::commit_all_except_task_file(&ws, &message)?;
+            // Pinned dates: deterministic FakeEngine bytes + fixed timestamps
+            // reproduce the IDENTICAL commit sha on a rerun, so the push
+            // probe below no-ops instead of hitting a non-fast-forward (the
+            // rerun was flaky across clock-second boundaries without this).
+            const PINNED: &str = "2026-01-01T00:00:00Z";
+            crate::git::commit_all_except_task_file_with_env(
+                &ws,
+                &message,
+                &[("GIT_AUTHOR_DATE", PINNED), ("GIT_COMMITTER_DATE", PINNED)],
+            )?;
             let local = crate::git::head_sha(&ws)?;
             if crate::git::ls_remote_sha(&g.remote_url, &record.branch)?.as_deref()
                 != Some(local.as_str())
