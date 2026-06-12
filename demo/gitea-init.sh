@@ -12,7 +12,13 @@
 #   SEED_REPO_DIR  local git repo whose `main` seeds the forge repo
 #                  (default: this repo; relative paths resolve from the
 #                  conduit repo root). E.g. ../playbook for the playbook
-#                  corpus demo.
+#                  corpus demo. When it names the playbook and is absent,
+#                  the suite resolution convention kicks in: COMO_PLAYBOOK_DIR
+#                  -> sibling ../playbook -> the gitignored .como/deps/playbook
+#                  clone cache (COMO_PLAYBOOK_GIT / COMO_GIT_BASE; playbook has
+#                  NO public remote yet, so this leg needs e.g. a file:// base)
+#                  -> a hard, actionable error. COMO_OFFLINE=1 uses a populated
+#                  cache as-is and never clones.
 #   REPO_NAME      forge repo name under org como
 #                  (default: conduit-dogfood).
 set -euo pipefail
@@ -21,8 +27,37 @@ cd "$(dirname "$0")/.." # repo root
 SEED_REPO_DIR="${SEED_REPO_DIR:-.}"
 REPO_NAME="${REPO_NAME:-conduit-dogfood}"
 if [ ! -d "$SEED_REPO_DIR/.git" ]; then
-  echo "ERROR: SEED_REPO_DIR=$SEED_REPO_DIR is not a git repo" >&2
-  exit 1
+  # Suite resolution convention, self-contained (never sources sibling code):
+  # the requested seed checkout is missing. For the playbook corpus demo,
+  # resolve COMO_PLAYBOOK_DIR -> sibling ../playbook -> the .como/deps clone
+  # cache before failing hard (demos need the corpus).
+  resolved=""
+  if [ "$(basename "$SEED_REPO_DIR")" = "playbook" ]; then
+    if [ -n "${COMO_PLAYBOOK_DIR:-}" ] && [ -d "${COMO_PLAYBOOK_DIR}/.git" ]; then
+      resolved="$COMO_PLAYBOOK_DIR"
+    elif [ -d ../playbook/.git ]; then
+      resolved=../playbook
+    elif [ -d .como/deps/playbook/.git ]; then
+      resolved=.como/deps/playbook # populated cache, used as-is (never auto-fetched)
+    elif [ "${COMO_OFFLINE:-0}" != "1" ]; then
+      url="${COMO_PLAYBOOK_GIT:-${COMO_GIT_BASE:-https://github.com/como-technologies}/playbook.git}"
+      mkdir -p .como/deps
+      if git clone --filter=blob:none "$url" .como/deps/playbook 2>/dev/null; then
+        resolved=.como/deps/playbook
+      fi
+    fi
+  fi
+  if [ -n "$resolved" ]; then
+    echo "gitea-init: NOTICE — SEED_REPO_DIR=$SEED_REPO_DIR is absent; resolved the playbook seed to $resolved" >&2
+    SEED_REPO_DIR="$resolved"
+  else
+    echo "ERROR: SEED_REPO_DIR=$SEED_REPO_DIR is not a git repo." >&2
+    echo "  Knobs: SEED_REPO_DIR (any local repo), COMO_PLAYBOOK_DIR (a playbook checkout)," >&2
+    echo "  or COMO_PLAYBOOK_GIT / COMO_GIT_BASE for the .como/deps/playbook clone cache." >&2
+    echo "  Note: playbook has NO public remote yet — the clone leg needs a file:// base" >&2
+    echo "  (e.g. COMO_GIT_BASE=file:///path/to/local/mirrors) until the owner pushes it." >&2
+    exit 1
+  fi
 fi
 COMPOSE=(docker compose -f demo/docker-compose.yml)
 BASE="http://localhost:3000"

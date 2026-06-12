@@ -273,8 +273,14 @@ named.
 ## adroit integration (read-only, allowlisted)
 
 - **Pin:** `adroit.rev` at repo root holds the git rev. `just init-adroit`
-  builds it from `file:///home/brett/repos/como-tech/adroit` at that rev
-  (`cargo install --git ... --locked --root .conduit`) — no network.
+  installs it from
+  `${COMO_ADROIT_GIT:-${COMO_GIT_BASE:-https://github.com/como-technologies}/adroit.git}`
+  at that rev (`cargo install --git ... --rev ... --locked --root .conduit`),
+  verifying after a probe clone (cached under gitignored `.como/deps/adroit`)
+  that the remote actually carries the pin; when it cannot (rev not pushed
+  yet, no network, `COMO_OFFLINE=1`), it falls back with a printed notice to
+  the sibling checkout `file://$(realpath ../adroit)` — the local-dev
+  override only (ADR-0014, the suite resolution convention).
 - **Handshake:** at startup run `adroit manifest -o json`; require
   `tool == "adroit" && manifest_schema == 1`, else bail loudly.
 - **Allowlist:** `src/adroit.rs` is the only adroit call site, hardcoded to

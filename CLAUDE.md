@@ -30,7 +30,8 @@ Always use `just` recipes — never raw `cargo`/`mdbook`.
 
 ```sh
 just init        # toolchain components + mdbook
-just init-adroit # pinned adroit -> .conduit/bin (reads adroit.rev)
+just init-adroit # pinned adroit -> .conduit/bin (adroit.rev; remote URL
+                 # via COMO_ADROIT_GIT/COMO_GIT_BASE, sibling file:// fallback)
 just ci          # fmt-check + clippy + test + book (the gate)
 just adr-check   # validate the in-repo adr/ corpus with the pinned adroit
 just test        # all tests

@@ -20,8 +20,13 @@
 # Env:
 #   RUN_DIR       workdir to create (default demo/runs/<UTC timestamp>;
 #                 must not already exist — unique per run)
-#   PLAYBOOK_DIR  playbook checkout (default ../playbook; must contain
-#                 src/adrs)
+#   PLAYBOOK_DIR  playbook checkout (must contain src/adrs). When unset, the
+#                 suite resolution convention applies: COMO_PLAYBOOK_DIR ->
+#                 sibling ../playbook -> the gitignored .como/deps/playbook
+#                 clone cache (COMO_PLAYBOOK_GIT / COMO_GIT_BASE; playbook
+#                 has NO public remote yet, so this leg needs e.g. a file://
+#                 base) -> a hard, actionable error. COMO_OFFLINE=1 uses a
+#                 populated cache as-is and never clones.
 # Prints the created workdir's absolute path on stdout; everything else
 # goes to stderr.
 set -euo pipefail
@@ -29,10 +34,32 @@ set -euo pipefail
 cd "$(dirname "$0")/.." # conduit repo root
 ROOT="$PWD"
 RUN_DIR="${RUN_DIR:-demo/runs/$(date -u +%Y%m%dT%H%M%SZ)}"
-PLAYBOOK_DIR="${PLAYBOOK_DIR:-../playbook}"
 
-if [ ! -d "$PLAYBOOK_DIR/src/adrs" ]; then
-  echo "ERROR: PLAYBOOK_DIR=$PLAYBOOK_DIR has no src/adrs corpus" >&2
+# Resolve the playbook corpus (suite resolution convention, self-contained —
+# never sources sibling code): explicit PLAYBOOK_DIR -> COMO_PLAYBOOK_DIR ->
+# sibling -> clone cache -> hard error (the demo needs the corpus).
+PLAYBOOK_DIR="${PLAYBOOK_DIR:-${COMO_PLAYBOOK_DIR:-}}"
+if [ -z "$PLAYBOOK_DIR" ]; then
+  if [ -d ../playbook/src/adrs ]; then
+    PLAYBOOK_DIR=../playbook
+  elif [ -d .como/deps/playbook/src/adrs ]; then
+    PLAYBOOK_DIR=.como/deps/playbook # populated cache, used as-is (never auto-fetched)
+    echo "playbook-demo-init: NOTICE — using the clone cache $PLAYBOOK_DIR" >&2
+  elif [ "${COMO_OFFLINE:-0}" != "1" ]; then
+    url="${COMO_PLAYBOOK_GIT:-${COMO_GIT_BASE:-https://github.com/como-technologies}/playbook.git}"
+    mkdir -p .como/deps
+    if git clone --filter=blob:none "$url" .como/deps/playbook 2>/dev/null; then
+      PLAYBOOK_DIR=.como/deps/playbook
+      echo "playbook-demo-init: NOTICE — no sibling ../playbook; cloned $url into $PLAYBOOK_DIR" >&2
+    fi
+  fi
+fi
+if [ ! -d "${PLAYBOOK_DIR:-}/src/adrs" ]; then
+  echo "ERROR: no playbook corpus found (need a checkout containing src/adrs)." >&2
+  echo "  Knobs: PLAYBOOK_DIR or COMO_PLAYBOOK_DIR (a playbook checkout; sibling ../playbook is" >&2
+  echo "  the default), or COMO_PLAYBOOK_GIT / COMO_GIT_BASE for the .como/deps/playbook clone cache." >&2
+  echo "  Note: playbook has NO public remote yet — the clone leg needs a file:// base" >&2
+  echo "  (e.g. COMO_GIT_BASE=file:///path/to/local/mirrors) until the owner pushes it." >&2
   exit 1
 fi
 ADRS="$(cd "$PLAYBOOK_DIR/src/adrs" && pwd)"

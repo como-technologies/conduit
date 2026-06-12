@@ -13,7 +13,15 @@ Two demo-shape changes over the [original walkthrough](./demo.md):
    repo under org `como`). Defaults preserve the self-dogfood demo
    (`.`/`conduit-dogfood`); token filenames stay pinned at
    `.secrets/conduit-bot.token` and `.secrets/reviewer.token` either way.
-   `demo/demo-trigger.sh` takes the same `REPO_NAME`.
+   `demo/demo-trigger.sh` takes the same `REPO_NAME`. The playbook checkout
+   itself resolves through the suite resolution convention (ADR-0014):
+   `COMO_PLAYBOOK_DIR` → the sibling `../playbook` → a read-only clone into
+   the gitignored `.como/deps/playbook` cache from
+   `${COMO_PLAYBOOK_GIT:-${COMO_GIT_BASE:-https://github.com/como-technologies}/playbook.git}`
+   → a hard, actionable error naming those knobs. The playbook has **no
+   public remote yet**, so the clone leg needs a `file://` base (e.g.
+   `COMO_GIT_BASE=file:///path/to/local/mirrors`) until the owner pushes it;
+   `COMO_OFFLINE=1` uses a populated cache as-is and never clones.
 2. **Per-run unique workdirs.** Run 1 taught that the repo's shared
    `.conduit/` store is not single-writer: two flows interleaving in one
    store stomp each other's cursors and task records. The demo flow now
@@ -23,8 +31,12 @@ Two demo-shape changes over the [original walkthrough](./demo.md):
 ## 1. Forge up, seeded with the playbook
 
 ```sh
-SEED_REPO_DIR=../playbook REPO_NAME=playbook just forge-up
+SEED_REPO_DIR="${COMO_PLAYBOOK_DIR:-../playbook}" REPO_NAME=playbook just forge-up
 ```
+
+(When the named playbook seed checkout is absent, `gitea-init.sh` falls
+through the convention chain above — env dir, sibling, clone cache — before
+failing with the knob-naming error.)
 
 Captured:
 
@@ -45,9 +57,12 @@ RUN_DIR=$(bash demo/playbook-demo-init.sh)
 cd "$RUN_DIR"
 ```
 
-The script refuses to reuse an existing dir (unique per run; default
-`demo/runs/<UTC timestamp>`, gitignored) and stocks the workdir with
-everything `conduit` resolves from its cwd:
+The script resolves the playbook corpus through the same convention chain
+(`PLAYBOOK_DIR` → `COMO_PLAYBOOK_DIR` → sibling `../playbook` →
+`.como/deps/playbook` clone cache → hard error), refuses to reuse an
+existing dir (unique per run; default `demo/runs/<UTC timestamp>`,
+gitignored), and stocks the workdir with everything `conduit` resolves from
+its cwd:
 
 - `conduit.toml` — `demo/playbook.conduit.toml` (the demo's exact,
   fully-documented config: gitea `como/playbook`, fake engine, `[adroit]
