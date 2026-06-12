@@ -200,7 +200,10 @@ fn cmd_plan(
         AdrSource::resolve_bin(dir),
         dir.join(&config.adroit.dir),
         &config.adroit,
-    );
+    )
+    // The adroit subprocess inherits the engine deadline ([engine]
+    // timeout_secs): a hung `plan` is group-killed, never blocks the daemon.
+    .with_timeout(std::time::Duration::from_secs(config.engine.timeout_secs));
     adroit.handshake()?;
     let detail = adroit.show(address)?;
     AdrSource::require_accepted(&detail)?;

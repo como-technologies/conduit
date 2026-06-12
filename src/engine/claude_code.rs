@@ -81,24 +81,6 @@ struct ResultEnvelope {
     is_error: Option<bool>,
 }
 
-/// SIGKILL the engine's process group (it was spawned with
-/// `process_group(0)`, so `child.id()` == the pgid), then reap the leader.
-/// `/usr/bin/kill -- -<pgid>` keeps the crate libc-free; constructed env
-/// (Task 10 precedent) and a fallback leader-kill if `kill` is unavailable.
-fn kill_group(child: &mut std::process::Child) {
-    let mut kill = std::process::Command::new("kill");
-    kill.env_clear();
-    if let Ok(path) = std::env::var("PATH") {
-        kill.env("PATH", path);
-    }
-    let _ = kill
-        .args(["-9", "--", &format!("-{}", child.id())])
-        .stdin(std::process::Stdio::null())
-        .output();
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
 /// Last 50 lines of stdout+stderr — the `log_tail` carried on `Failed`.
 fn log_tail(stdout: &[u8], stderr: &[u8]) -> String {
     let combined = format!(
@@ -134,61 +116,15 @@ impl Engine for ClaudeCodeEngine {
         }
         cmd.current_dir(&spec.workspace)
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
             .args(build_args(PROMPT));
-        // Own process group: on timeout the WHOLE group is killed. Engines
-        // fork (claude spawns tools); killing only the leader leaves
-        // grandchildren holding the output pipes, which would block the
-        // reader join arbitrarily far past the deadline.
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
-        }
-        let mut child = cmd
-            .spawn()
+        // The shared deadline harness (src/proc.rs): own process group, pipes
+        // drained on threads, group-SIGKILL at the deadline — engines fork,
+        // and killing only the leader leaves grandchildren holding the pipes.
+        let output = crate::proc::run_with_deadline(&mut cmd, self.timeout)
             .map_err(|e| EngineError::Spawn(format!("{}: {e}", self.binary.display())))?;
+        let tail = log_tail(&output.stdout, &output.stderr);
 
-        // Drain pipes on threads (a full pipe would deadlock the poll loop);
-        // the main thread polls against the conduit-enforced deadline.
-        let mut child_stdout = child.stdout.take().expect("stdout was piped");
-        let mut child_stderr = child.stderr.take().expect("stderr was piped");
-        let stdout_reader = std::thread::spawn(move || {
-            use std::io::Read;
-            let mut buf = Vec::new();
-            let _ = child_stdout.read_to_end(&mut buf);
-            buf
-        });
-        let stderr_reader = std::thread::spawn(move || {
-            use std::io::Read;
-            let mut buf = Vec::new();
-            let _ = child_stderr.read_to_end(&mut buf);
-            buf
-        });
-
-        let deadline = std::time::Instant::now() + self.timeout;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) => {
-                    let now = std::time::Instant::now();
-                    if now >= deadline {
-                        kill_group(&mut child);
-                        break None; // timeout
-                    }
-                    std::thread::sleep((deadline - now).min(std::time::Duration::from_millis(500)));
-                }
-                Err(e) => {
-                    kill_group(&mut child);
-                    return Err(EngineError::Spawn(format!("waiting on engine: {e}")));
-                }
-            }
-        };
-        let stdout = stdout_reader.join().unwrap_or_default();
-        let stderr = stderr_reader.join().unwrap_or_default();
-        let tail = log_tail(&stdout, &stderr);
-
-        let Some(status) = status else {
+        let Some(status) = output.status else {
             return Ok(EngineOutcome::Failed {
                 reason: "timeout".to_string(),
                 log_tail: tail,
@@ -202,7 +138,7 @@ impl Engine for ClaudeCodeEngine {
         }
         // Parse the JSON result envelope; unparseable is a Failed (the task
         // can be retried), never an EngineError.
-        match serde_json::from_slice::<ResultEnvelope>(&stdout) {
+        match serde_json::from_slice::<ResultEnvelope>(&output.stdout) {
             Ok(envelope) if envelope.is_error == Some(true) => Ok(EngineOutcome::Failed {
                 reason: envelope
                     .result

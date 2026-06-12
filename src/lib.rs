@@ -11,6 +11,7 @@ pub mod engine;
 pub mod forge;
 pub mod git;
 pub mod machine;
+pub mod proc;
 pub mod router;
 pub mod store;
 pub mod task;

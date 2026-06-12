@@ -25,6 +25,8 @@ pub enum AdroitError {
         code: Option<i32>,
         stderr: String,
     },
+    #[error("adroit {subcommand} exceeded the {secs}s deadline (process group killed)")]
+    Timeout { subcommand: String, secs: u64 },
     #[error("unparseable adroit {subcommand} output: {source}")]
     BadJson {
         subcommand: String,
@@ -73,6 +75,9 @@ pub struct AdrSource {
     bin: PathBuf,                  // .conduit/bin/adroit (or injected stub in tests)
     dir: PathBuf,                  // the ADR corpus (config adroit.dir)
     ai_env: Vec<(String, String)>, // ADROIT_AI_PROVIDER/MODEL (+ key if configured)
+    /// Subprocess deadline — every adroit call inherits the engine deadline
+    /// (`[engine] timeout_secs`); see [`AdrSource::with_timeout`].
+    timeout: std::time::Duration,
     #[cfg(test)]
     extra_env: Vec<(String, String)>, // fixture plumbing for the stub binary
 }
@@ -115,9 +120,24 @@ impl AdrSource {
             bin,
             dir,
             ai_env,
+            // Default mirrors the engine deadline default; cmd_plan overrides
+            // with the configured `[engine] timeout_secs` (the inherited
+            // deadline — spec follow-up 2).
+            timeout: std::time::Duration::from_secs(
+                crate::config::EngineConfig::default().timeout_secs,
+            ),
             #[cfg(test)]
             extra_env: Vec::new(),
         }
+    }
+
+    /// Set the subprocess deadline. A hung or runaway adroit (fresh `plan`
+    /// generations especially — stored reads are instant) is killed as a
+    /// PROCESS GROUP at the deadline, exactly like the engine runner:
+    /// leader-only kill leaves grandchildren holding the output pipes.
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.timeout = timeout;
+        self
     }
 
     /// Test-only fixture plumbing: env vars the stub binary reads (FAKE_ADROIT_*).
@@ -219,9 +239,6 @@ impl AdrSource {
                 cmd.env(keep, v);
             }
         }
-        // A hung or runaway `plan` (fresh generation only — stored reads are
-        // instant) currently blocks the caller; TODO(timeout): reuse the
-        // engine deadline mechanism from Task 11 here.
         cmd.stdin(std::process::Stdio::null());
         cmd.env("ADROIT_DIR", &self.dir)
             .envs(self.ai_env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
@@ -231,7 +248,10 @@ impl AdrSource {
             .arg("json");
         #[cfg(test)]
         cmd.envs(self.extra_env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
-        let output = cmd.output().map_err(|e| {
+        // The subprocess inherits the engine deadline (follow-up 2): a hung
+        // or runaway `plan` is killed as a process group at `self.timeout`
+        // via the shared harness — the same mechanism the engine runner uses.
+        let output = crate::proc::run_with_deadline(&mut cmd, self.timeout).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 AdroitError::Missing(self.bin.clone())
             } else {
@@ -242,10 +262,16 @@ impl AdrSource {
                 }
             }
         })?;
-        if !output.status.success() {
+        let Some(status) = output.status else {
+            return Err(AdroitError::Timeout {
+                subcommand: subcommand.to_string(),
+                secs: self.timeout.as_secs(),
+            });
+        };
+        if !status.success() {
             return Err(AdroitError::Subprocess {
                 subcommand: subcommand.to_string(),
-                code: output.status.code(),
+                code: status.code(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             });
         }
@@ -422,6 +448,33 @@ mod tests {
         let src = stub_source(d.path()).with_env("FAKE_ADROIT_PLAN", fresh.to_str().unwrap());
         let env = src.plan("3").unwrap();
         assert!(!env.stored, "absent stored field defaults to false");
+    }
+
+    /// Follow-up 2 regression: a hung adroit must fail within the configured
+    /// deadline. The stub backgrounds a child that inherits the output pipes
+    /// — only a process-group kill closes them (a leader-only kill would
+    /// block the call on the pipe readers for the full 30s).
+    #[test]
+    fn hung_plan_fails_within_timeout_via_process_group_kill() {
+        let d = tempfile::TempDir::new().unwrap();
+        let hang = d.path().join("hanging-adroit");
+        std::fs::write(&hang, "#!/bin/sh\nsleep 30 &\nsleep 30\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hang, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let src = AdrSource::new(hang, d.path().into(), &AdroitConfig::default())
+            .with_timeout(std::time::Duration::from_millis(700));
+        let start = std::time::Instant::now();
+        let err = src.plan("3").unwrap_err();
+        assert!(
+            matches!(err, AdroitError::Timeout { .. }),
+            "expected Timeout, got {err:?}"
+        );
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "the call must return promptly after the deadline, not wait out \
+             adroit grandchildren: took {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]
