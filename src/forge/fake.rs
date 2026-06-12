@@ -224,7 +224,26 @@ impl FakeForge {
     /// Arm single-shot fault injection: the NEXT call to the named mutator
     /// (e.g. `"open_pr"`) fails with a 500, then the slot clears. Drives the
     /// cursor-ordering e2e (a failed action must leave the cursor unadvanced).
+    ///
+    /// Panics immediately if `method` is not one of the known mutator names —
+    /// fail fast on typos in test infra rather than silently injecting nothing.
     pub fn fail_next(&self, method: &str) {
+        const VALID: &[&str] = &[
+            "ensure_labels",
+            "create_issue",
+            "upsert_issue_comment",
+            "set_issue_labels",
+            "close_issue",
+            "open_pr",
+            "upsert_pr_comment",
+            "set_pr_labels",
+        ];
+        assert!(
+            VALID.contains(&method),
+            "FakeForge::fail_next: unknown mutator {:?}; valid names are: {:?}",
+            method,
+            VALID,
+        );
         self.state.lock().expect("FakeForge lock").fail_next = Some(method.to_string());
     }
 

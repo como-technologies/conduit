@@ -763,7 +763,12 @@ fn cursor_advances_only_after_actions_complete() {
         "cursor NOT advanced after a failed action"
     );
     let r = rig.record();
-    assert_eq!(r.state, TaskState::InReview, "write-ahead state persisted");
+    // InReview here is the RECURSIVE apply's write: the engine ran
+    // synchronously inside the tick and wrote InReview (with its full
+    // pending intent list) before open_pr was attempted and failed.
+    // It is NOT the Coding write-ahead — Coding is only ever a crash state
+    // and is never the final persisted value after a synchronous engine run.
+    assert_eq!(r.state, TaskState::InReview);
     assert_eq!(r.pr, None);
     assert!(
         r.pending.iter().any(|i| !i.done),

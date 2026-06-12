@@ -16,6 +16,7 @@ use crate::engine::{EngineOutcome, TaskSpec};
 use crate::forge::{ForgeEvent, NewIssue, PrDraft, RepoSnapshot};
 use crate::machine::{self, Action, Event, FeedbackOp, Transition};
 use crate::task::{ActionIntent, EngineResult, IssueId, PrId, TaskRecord, TaskState};
+use anyhow::Context as _;
 
 pub struct Router<'a> {
     pub forge: &'a dyn crate::forge::Forge,
@@ -26,6 +27,29 @@ pub struct Router<'a> {
     pub config: &'a crate::config::Config,
     /// "main".
     pub base_branch: String,
+}
+
+impl<'a> Router<'a> {
+    /// Assemble a Router. Public fields remain accessible for the spike, but
+    /// this constructor is the documented assembly point — callers should build
+    /// through here so field names and defaults stay in one place.
+    pub fn new(
+        forge: &'a dyn crate::forge::Forge,
+        forge_name: impl Into<String>,
+        engine: &'a dyn crate::engine::Engine,
+        store: &'a crate::store::Store,
+        config: &'a crate::config::Config,
+        base_branch: impl Into<String>,
+    ) -> Self {
+        Router {
+            forge,
+            forge_name: forge_name.into(),
+            engine,
+            store,
+            config,
+            base_branch: base_branch.into(),
+        }
+    }
 }
 
 impl Router<'_> {
@@ -39,7 +63,9 @@ impl Router<'_> {
     /// must self-heal before re-diffing.
     pub fn recover(&self) -> anyhow::Result<()> {
         for record in self.store.list_tasks()? {
-            self.reconcile(record)?;
+            let id = record.id.clone();
+            self.reconcile(record)
+                .with_context(|| format!("recover: task {id}"))?;
         }
         Ok(())
     }
@@ -62,8 +88,12 @@ impl Router<'_> {
             },
         };
         let events = crate::forge::diff(&prev, &next);
+        // Load once per tick: routing only needs the task list as routing
+        // keys; mutations during the loop persist via apply/save_task and
+        // do not affect the routing key lookups that follow.
+        let tasks = self.store.list_tasks()?;
         for (idx, event) in events.iter().enumerate() {
-            let Some((mut record, machine_event)) = self.route(event, &next)? else {
+            let Some((mut record, machine_event)) = self.route(event, &next, &tasks)? else {
                 continue;
             };
             let transition = machine::step(&record, &machine_event);
@@ -78,7 +108,9 @@ impl Router<'_> {
                             if *p == pr)
                 })
             });
-            self.apply(&mut record, transition, discard_engine)?;
+            let next_state = transition.next;
+            self.apply(&mut record, transition, discard_engine)
+                .with_context(|| format!("tick: task {} -> {next_state:?}", record.id))?;
         }
         // (4) cursor advances ONLY after every event's actions completed.
         self.store
@@ -86,10 +118,15 @@ impl Router<'_> {
         Ok(())
     }
 
-    /// Idempotent issue creation — the `conduit plan` replay path (spec
-    /// §Idempotency: probe `find_issue_by_marker` before `create_issue`).
-    /// On a probe hit the existing issue is adopted; either way the id is
-    /// written back onto the record and saved.
+    /// Idempotent issue creation — the `conduit plan` path (spec
+    /// §Idempotency), invoked BEFORE the first [`tick`](Self::tick) when a
+    /// task is created.
+    ///
+    /// Probe-first: calls `find_issue_by_marker` so that a replay (e.g.
+    /// conduit restarted after `create_issue` succeeded but before the id
+    /// write-back was persisted) adopts the existing issue rather than
+    /// opening a duplicate.  On a probe hit the existing id is adopted;
+    /// either way the id is written back onto the record and saved.
     pub fn ensure_issue(&self, record: &mut TaskRecord) -> anyhow::Result<()> {
         if record.issue.is_some() {
             return Ok(());
@@ -139,24 +176,29 @@ impl Router<'_> {
     /// Map a ForgeEvent to (task, machine::Event). Routing keys: issue id ->
     /// record.issue; pr id -> record.pr; a PR seen for a known branch with no
     /// recorded pr id adopts it (open_pr replay reconciliation).
+    ///
+    /// `tasks` is the snapshot loaded once per [`tick`](Self::tick) and is
+    /// used only for routing-key resolution (finding which task owns this
+    /// event). After a match the live record is re-read from the store so the
+    /// state machine sees mutations written by earlier events in the same tick.
     fn route(
         &self,
         event: &ForgeEvent,
         snapshot: &RepoSnapshot,
+        tasks: &[TaskRecord],
     ) -> anyhow::Result<Option<(TaskRecord, Event)>> {
-        let tasks = self.store.list_tasks()?;
-        Ok(match event {
-            ForgeEvent::IssueLabeled { issue, label } => tasks
-                .into_iter()
-                .find(|t| t.issue == Some(*issue))
-                .map(|t| {
+        // Resolve routing key → task id (+PR adoption if needed).
+        let found: Option<(TaskRecord, Event)> = match event {
+            ForgeEvent::IssueLabeled { issue, label } => {
+                tasks.iter().find(|t| t.issue == Some(*issue)).map(|t| {
                     (
-                        t,
+                        t.clone(),
                         Event::IssueLabeled {
                             label: label.clone(),
                         },
                     )
-                }),
+                })
+            }
             ForgeEvent::ReviewSubmitted { pr, review } => {
                 task_for_pr(tasks, *pr, snapshot).map(|t| {
                     (
@@ -182,7 +224,31 @@ impl Router<'_> {
             ForgeEvent::PrClosed { pr } => {
                 task_for_pr(tasks, *pr, snapshot).map(|t| (t, Event::PrClosed))
             }
-        })
+        };
+
+        // Re-read the live record so any mutations from earlier events in this
+        // tick (state, attempt, pending) are visible to machine::step. For the
+        // PR-adoption path the adoption (pr id write-back) is preserved: the
+        // live record is returned as-is when adoption was the only change, or
+        // the adopted id is applied onto the fresh read when a later mutation
+        // was also saved.
+        match found {
+            None => Ok(None),
+            Some((task, machine_event)) => {
+                let adopted_pr = task.pr;
+                let live = self
+                    .store
+                    .load_task(&task.id)?
+                    .ok_or_else(|| anyhow::anyhow!("task {} disappeared mid-tick", task.id))?;
+                // If route() set an adopted PR id that the live record doesn't
+                // have yet (pr-adoption path), carry it forward.
+                let mut live = live;
+                if live.pr.is_none() && adopted_pr.is_some() {
+                    live.pr = adopted_pr;
+                }
+                Ok(Some((live, machine_event)))
+            }
+        }
     }
 
     /// Apply one transition: mutate the record (state/feedback/attempt),
@@ -206,7 +272,16 @@ impl Router<'_> {
         }
         // Replacing pending is safe: reconcile runs before any routing, so
         // every prior intent is done by the time a new transition lands.
-        debug_assert!(record.pending.iter().all(|i| i.done));
+        // Enforced in release builds: replacing a partially-executed intent
+        // list would corrupt the write-ahead log (undone intents become
+        // invisible to the next reconcile and their effects are lost forever).
+        assert!(
+            record.pending.iter().all(|i| i.done),
+            "task {}: attempted to replace pending intents while {} are still undone \
+             (write-ahead log corruption)",
+            record.id,
+            record.pending.iter().filter(|i| !i.done).count(),
+        );
         record.pending = t
             .actions
             .into_iter()
@@ -436,14 +511,15 @@ impl Router<'_> {
 /// pr id -> task; a PR seen for a known branch with no recorded pr id adopts
 /// it (open_pr replay reconciliation) — the adoption is persisted by
 /// `apply`'s save.
-fn task_for_pr(tasks: Vec<TaskRecord>, pr: PrId, snapshot: &RepoSnapshot) -> Option<TaskRecord> {
+fn task_for_pr(tasks: &[TaskRecord], pr: PrId, snapshot: &RepoSnapshot) -> Option<TaskRecord> {
     if let Some(t) = tasks.iter().find(|t| t.pr == Some(pr)) {
         return Some(t.clone());
     }
     let head = &snapshot.prs.iter().find(|p| p.id == pr)?.head_branch;
     let mut t = tasks
-        .into_iter()
-        .find(|t| t.pr.is_none() && &t.branch == head)?;
+        .iter()
+        .find(|t| t.pr.is_none() && &t.branch == head)?
+        .clone();
     t.pr = Some(pr);
     Some(t)
 }
