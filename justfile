@@ -40,6 +40,12 @@ init-adroit:
     cargo install --git file:///home/brett/repos/como-tech/adroit --rev $(grep -v '^#' adroit.rev | tail -1) --locked --root .conduit adroit
     .conduit/bin/adroit manifest -o json > /dev/null && echo "adroit handshake OK"
 
+# Validate conduit's own ADR corpus with the pinned adroit.
+# Standalone, not a `ci` leg: CI is a fresh checkout and the pin lives in
+# gitignored .conduit/ — run after `just init-adroit`.
+adr-check:
+    .conduit/bin/adroit check --dir adr
+
 # Scripted demo trigger: label the demo issue conduit:run as the reviewer
 demo-trigger:
     bash demo/demo-trigger.sh

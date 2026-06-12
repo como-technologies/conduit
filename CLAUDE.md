@@ -32,10 +32,17 @@ Always use `just` recipes — never raw `cargo`/`mdbook`.
 just init        # toolchain components + mdbook
 just init-adroit # pinned adroit -> .conduit/bin (reads adroit.rev)
 just ci          # fmt-check + clippy + test + book (the gate)
+just adr-check   # validate the in-repo adr/ corpus with the pinned adroit
 just test        # all tests
 just forge-up    # throwaway Gitea on localhost:3000 (demo/)
 just forge-down  # destroy it
 ```
+
+`adr-check` is standalone, not a `ci` leg: CI is a fresh checkout and the
+adroit pin lives in gitignored `.conduit/` — run it after `just init-adroit`
+(the demo does). The `adr/` corpus is authored ONLY with the pinned adroit
+(`new` / `edit` / `set-status` / `plan --save`), never by hand, and keeps
+adroit's forge integration disabled.
 
 Env-gated test legs: `CONDUIT_E2E_GITEA=1` (live Gitea conformance),
 `CONDUIT_E2E_GITHUB=1` (GitHub live reads), `CONDUIT_E2E_ADROIT=1` (pinned
