@@ -66,6 +66,7 @@ fn unimplemented_commands_fail_loudly() {
     for args in [
         vec!["init"],
         vec!["plan", "3"],
+        vec!["run"],
         vec!["verify", "3"],
         vec!["demo-transcript", "3"],
     ] {

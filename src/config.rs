@@ -172,6 +172,8 @@ pub enum ConfigError {
     Parse(#[from] toml::de::Error),
     #[error("invalid env override {var}={value}")]
     Env { var: String, value: String },
+    #[error("invalid configuration: {0}")]
+    Validation(String),
 }
 
 // ── Config impl ────────────────────────────────────────────────────────────
@@ -235,7 +237,7 @@ impl Config {
 
     /// Validate that effort thresholds are strictly increasing:
     /// super_quick < not_long < average < a_while.
-    pub fn validate(&self) -> Result<(), ConfigError> {
+    pub(crate) fn validate(&self) -> Result<(), ConfigError> {
         let e = &self.effort;
         if e.super_quick_max_ms < e.not_long_max_ms
             && e.not_long_max_ms < e.average_max_ms
@@ -243,13 +245,10 @@ impl Config {
         {
             Ok(())
         } else {
-            Err(ConfigError::Env {
-                var: "[effort]".to_string(),
-                value: format!(
-                    "thresholds must be strictly increasing: {}<{}<{}<{}",
-                    e.super_quick_max_ms, e.not_long_max_ms, e.average_max_ms, e.a_while_max_ms
-                ),
-            })
+            Err(ConfigError::Validation(format!(
+                "[effort] thresholds must be strictly increasing: {}<{}<{}<{}",
+                e.super_quick_max_ms, e.not_long_max_ms, e.average_max_ms, e.a_while_max_ms
+            )))
         }
     }
 
@@ -271,6 +270,9 @@ impl Config {
                     Some(trimmed)
                 }
             }
+            // NotFound is the normal "no secrets provisioned" case. Anything
+            // else (EISDIR, EPERM, ...) is swallowed too — the symptom is a
+            // 401 from the forge; revisit if a logger lands post-spike.
             Err(_) => None,
         }
     }
