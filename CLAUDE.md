@@ -39,7 +39,8 @@ just forge-down  # destroy it
 
 Env-gated test legs: `CONDUIT_E2E_GITEA=1` (live Gitea conformance),
 `CONDUIT_E2E_GITHUB=1` (GitHub live reads), `CONDUIT_E2E_ADROIT=1` (pinned
-adroit binary contract tests).
+adroit binary contract tests), `CONDUIT_E2E_CLAUDE=1` (live claude CLI
+engine smoke).
 
 ## Design rules
 
