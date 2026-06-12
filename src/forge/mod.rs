@@ -43,6 +43,8 @@
 //! Note: `IssueSnapshot.closed` is carried for adapters/probes but is not read
 //! by `diff()` — no issue-closed event exists by design.
 
+pub mod fake;
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
