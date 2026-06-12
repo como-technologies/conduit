@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# demo-down — tear the whole demo down. Leaves nothing: the forge container
+# AND its volume are destroyed, the per-run workdir is removed, the pointer
+# is cleared. No remote was ever touched — the only push target the demo
+# has is the throwaway localhost forge. Idempotent: safe to run when
+# nothing (or only part) is up.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+beat_start
+
+banner "DEMO-DOWN" "tear down; nothing left"
+talking_point <<'EOF'
+The whole engagement ran on a throwaway forge on this machine. Tear-down
+destroys the container and its volume; the per-run workdir goes with it.
+Nothing was ever pushed anywhere but localhost — the client's real
+infrastructure was never in the blast radius.
+EOF
+
+echo " RUN: just forge-down   (container + volume destroyed)"
+(cd "$ROOT" && just forge-down) 2>&1 | sed 's/^/   /'
+
+if [ -f "$CURRENT_FILE" ]; then
+    WORK="$(cat "$CURRENT_FILE")"
+    case "$WORK" in
+    "$ROOT"/demo/runs/*)
+        rm -rf "$WORK"
+        echo "   removed workdir $WORK"
+        ;;
+    *) note "pointer $WORK is outside demo/runs — not removing it" ;;
+    esac
+    rm -f "$CURRENT_FILE"
+fi
+
+evidence "nothing left"
+if docker ps -a --format '{{.Names}}' | grep -q '^conduit-gitea$'; then
+    die "conduit-gitea container still present"
+else
+    echo "   forge container: gone"
+fi
+if docker volume ls --format '{{.Name}}' | grep -q 'gitea-data'; then
+    die "gitea data volume still present"
+else
+    echo "   forge volume: gone"
+fi
+echo "   workdir: gone"
+echo "   remotes touched: none (localhost was the only push target, ever)"
+beat_end "demo-down"

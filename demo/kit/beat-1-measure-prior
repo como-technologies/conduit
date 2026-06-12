@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Beat 1 — MEASURE (prior period). The engagement starts from a measured
+# baseline: pulse's verified-anonymous team sentiment, produced by the
+# seeded simulation (deterministic by design — same seed, byte-identical
+# report). The report becomes beat 2's --context input: measurement feeds
+# the next assessment.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+WORK="$(workdir)"
+beat_start
+
+banner "BEAT 1 — MEASURE THE PRIOR PERIOD" "pulse, seeded + deterministic"
+talking_point <<'EOF'
+Before Como prescribes anything, we measure. pulse collects the team's
+sentiment with cryptographic anonymity — k-anonymity suppression is
+tested on both sides of the threshold, so nobody's answer is ever
+identifiable. The demo runs the seeded simulation: same seed, byte-for-
+byte identical report. Determinism is designed in, not hoped for —
+watch us prove it by running it twice.
+EOF
+
+PULSE="$(require_repo pulse)"
+
+echo " RUN: just dogfood   (in the pulse repo — twice, to prove determinism)"
+(cd "$PULSE" && just dogfood) >/dev/null 2>&1
+SHA1="$(sha256sum "$PULSE/out/pulse-report.json" | cut -d' ' -f1)"
+(cd "$PULSE" && just dogfood) >/dev/null 2>&1
+SHA2="$(sha256sum "$PULSE/out/pulse-report.json" | cut -d' ' -f1)"
+cp "$PULSE/out/pulse-report.json" "$WORK/pulse-report.json"
+
+evidence "determinism (two runs, same seed)"
+echo "   run 1 sha256: $SHA1"
+echo "   run 2 sha256: $SHA2"
+[ "$SHA1" = "$SHA2" ] && echo "   BYTE-IDENTICAL: yes" || die "pulse report was not deterministic"
+
+evidence "the Measure artifact (pulse.measure-report/v1)"
+jq -r '"   schema \(.schema)  seed \(.seed)  flows \(.successful)/\(.total_flows) passed, \(.failed) failed"' \
+    "$WORK/pulse-report.json"
+jq -r '.batches[] | .aggregation.segments[0] as $s |
+  "   signal: \"\(.question_text)\" -> avg \($s.average_score) (\($s.unique_pseudonyms) unique pseudonyms, suppressed: \($s.suppressed))"' \
+    "$WORK/pulse-report.json"
+
+echo
+echo " -> artifact for beat 2: $WORK/pulse-report.json"
+beat_end "beat-1-measure-prior"

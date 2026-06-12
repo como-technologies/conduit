@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Beat 5 — MEASURE. tuesday attributes the merged effort back to the
+# decision that prompted it, in strict mode (every merged PR must be
+# accounted for), and the cross-check asserts that Adopt (conduit verify)
+# and Measure (tuesday) — two independent codebases — agree on the same
+# ground truth. The loop closes: this report and beat 1's pulse signals
+# are exactly what the NEXT assessment takes as --context.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+WORK="$(workdir)"
+require_forge
+beat_start
+
+banner "BEAT 5 — MEASURE" "tuesday --strict + the Adopt<->Measure cross-check"
+talking_point <<'EOF'
+Adoption you can count, not activity you take on faith. tuesday reads the
+merged PRs off the client's forge and rolls measured hours up per
+decision — strict mode exits nonzero if even one merged PR is
+unaccounted for. Then the double-entry bookkeeping: conduit's verify and
+tuesday's report are two independent codebases, and the cross-check
+asserts they agree on the same PR, the same effort label, the same
+decision. Finally, the loop closes: this report plus the pulse signal
+feed the next assessment — which is where this demo began.
+EOF
+
+[ -f "$WORK/conduit-verify.json" ] || die "no conduit-verify.json in the workdir — run beat-4-adopt first"
+TUESDAY="$(require_repo tuesday)"
+
+echo " RUN: tuesday-report --source gitea --owner como --repo playbook --monthly-hours 160 -o json --strict"
+echo "      (= tuesday's own \`just dogfood-report playbook\`; token rides the env, never argv or git)"
+TUESDAY_GITEA_TOKEN="$(reviewer_token)" \
+    "$TUESDAY/target/debug/tuesday-report" --source gitea --owner como \
+    --repo playbook --year "$(date -u +%Y)" --month "$(date -u +%-m)" \
+    --monthly-hours 160 -o json --strict >"$WORK/tuesday-report.json"
+echo "   exit code: 0 (strict mode satisfied)"
+
+evidence "decision-attributed effort (the Measure artifact)"
+jq -r '"   \(.organization) \(.year)-\(.month): \(.allocations | length) allocation(s), \(.unallocated_prs | length) unallocated PR(s) [strict requires 0]"' \
+    "$WORK/tuesday-report.json"
+jq -r '.allocations[] | "   PR \(.pr_number) \"\(.pr_title)\" -> \(.adr_id) (\(.effort_score), \(.allocated_hours)h)"' \
+    "$WORK/tuesday-report.json"
+jq -r '.adr_totals | to_entries[] | "   adr_totals: \(.key) = \(.value)h"' "$WORK/tuesday-report.json"
+
+echo
+echo " RUN: cross-check (Adopt vs Measure — two codebases, one ground truth)"
+(cd "$TUESDAY" && bash scripts/cross-check.sh "$WORK/conduit-verify.json" "$WORK/tuesday-report.json") | sed 's/^/   /'
+
+evidence "the closed loop"
+echo "   next-period inputs ready: $WORK/tuesday-report.json + $WORK/pulse-report.json"
+echo "   (beat 2 --live consumes them as --context — measurement steers the next assessment)"
+beat_end "beat-5-measure"

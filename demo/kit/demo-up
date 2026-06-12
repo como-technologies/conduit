@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# demo-up — one command stands the whole customer demo up.
+#
+# Resolves every cross-repo dependency per the suite convention (ADR-0014),
+# builds whatever is missing (conduit, the pinned adroit, the assessments /
+# tuesday-cli / pulse-simulate binaries), stands up the throwaway forge
+# seeded with the playbook corpus, creates the per-run workdir, pre-creates
+# the label set, pre-warms the local model for the live lanes, and prints
+# the beat menu. Idempotent: re-running against a live demo keeps the forge
+# and the workdir (tear down with demo-down to start clean).
+#
+# Narrated script: docs/src/usage/customer-demo.md.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+beat_start
+
+banner "DEMO-UP" "stand up the whole engagement demo"
+
+# ── 1. Resolve the suite (ADR-0014 chain; provenance printed) ──────────────
+echo "[1/6] resolving cross-repo dependencies"
+PLAYBOOK="$(require_repo playbook)" # the fictional client's decision corpus
+[ -d "$PLAYBOOK/src/adrs" ] || die "resolved playbook at $PLAYBOOK has no src/adrs corpus"
+PULSE="$(resolve_repo pulse)"             # beat 1 (sentiment) — skippable
+ASSESSMENTS="$(resolve_repo assessments)" # beat 2 — skippable (pre-baked artifact ships in the kit)
+TUESDAY="$(resolve_repo tuesday)"         # beat 5 — skippable
+
+# ── 2. Build conduit + install the pinned adroit ───────────────────────────
+echo "[2/6] building conduit + installing the pinned adroit"
+(cd "$ROOT" && cargo build -q)
+(cd "$ROOT" && just init-adroit)
+
+# ── 3. Build the sibling binaries the beats call ───────────────────────────
+echo "[3/6] building sibling binaries (only what resolved; incremental)"
+if [ -n "$PULSE" ]; then
+    (cd "$PULSE" && cargo build -q -p pulse-test-harness --features reqwest-transport --bin pulse-simulate)
+else
+    note "pulse unresolved — beat 1 will be unavailable"
+fi
+if [ -n "$ASSESSMENTS" ]; then
+    (cd "$ASSESSMENTS" && cargo build -q)
+else
+    note "assessments unresolved — beat 2 will be unavailable (validate + live author both need the binary)"
+fi
+if [ -n "$TUESDAY" ]; then
+    (cd "$TUESDAY" && cargo build -q -p tuesday-cli)
+else
+    note "tuesday unresolved — beat 5 will be unavailable"
+fi
+
+# ── 4. The throwaway forge, seeded with the client corpus ──────────────────
+echo "[4/6] forge"
+if forge_healthy && forge_repo_exists; then
+    note "forge already up with como/playbook — keeping it (demo-down to reset)"
+else
+    (cd "$ROOT" && SEED_REPO_DIR="$PLAYBOOK" REPO_NAME=playbook just forge-up)
+fi
+
+# ── 5. The per-run workdir (kit-owns-no-state: everything lands here) ──────
+echo "[5/6] per-run workdir"
+if [ -f "$CURRENT_FILE" ] && [ -d "$(cat "$CURRENT_FILE")" ]; then
+    WORK="$(cat "$CURRENT_FILE")"
+    note "reusing the active workdir $WORK (idempotent re-up)"
+else
+    WORK="$(cd "$ROOT" && RUN_DIR="demo/runs/kit-$(date -u +%Y%m%dT%H%M%SZ)" \
+        PLAYBOOK_DIR="$PLAYBOOK" bash demo/playbook-demo-init.sh)"
+    echo "$WORK" >"$CURRENT_FILE"
+fi
+(cd "$WORK" && "$CONDUIT" init)
+
+# ── 6. Pre-warm the live lanes (optional — pre-baked needs nothing) ────────
+echo "[6/6] live-lane check (ollama)"
+if ollama_ready; then
+    # Load the model into memory so a live beat doesn't pay cold-start.
+    curl -fsS http://localhost:11434/api/generate \
+        -d "{\"model\":\"$OLLAMA_MODEL\",\"prompt\":\"ok\",\"stream\":false}" >/dev/null 2>&1 || true
+    note "ollama '$OLLAMA_MODEL' is up and pre-warmed — --live variants available"
+else
+    note "ollama '$OLLAMA_MODEL' not available — pre-baked fast path only (that is fine)"
+fi
+
+beat_end "demo-up"
+echo
+banner "THE BEAT MENU" "run from anywhere; each beat prints its own evidence"
+cat <<EOF
+ demo/kit/beat-1-measure-prior      Measure (prior): pulse's verified-anonymous team signal
+ demo/kit/beat-2-assess [--live]    Assess: brief + signals -> schema-valid assessment
+ demo/kit/beat-3-prescribe [--live] Prescribe: assessment -> ADRs; accept; stored plan
+ demo/kit/beat-4-adopt [--restart]  Adopt: stored plan -> human-gated PR -> merged -> verify 6/6
+ demo/kit/beat-5-measure            Measure: tuesday --strict + Adopt<->Measure cross-check
+ demo/kit/demo-down                 Tear down: forge destroyed, workdir removed, nothing left
+
+ Pre-baked beats run in seconds. --live recomputes on local ollama
+ ($OLLAMA_MODEL): expect ~6 min for beat 2, ~5-6 min for beat 3.
+ Workdir: $WORK
+EOF

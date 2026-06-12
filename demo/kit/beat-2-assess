@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Beat 2 — ASSESS. An assessment authored from the client's brief (plus the
+# prior period's measured signals), on local AI — no cloud, no data leaves
+# the room.
+#
+# Pre-baked fast path (default): the kit ships the assessment this exact
+# pipeline authored on 2026-06-12 (llama3.2, 355.9s, zero retries); the
+# beat re-validates it against the schema live. --live recomputes it now
+# on local ollama (~6 min) — same command, same gates.
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+WORK="$(workdir)"
+LIVE=0
+[ "${1:-}" = "--live" ] && LIVE=1
+beat_start
+
+banner "BEAT 2 — ASSESS" "$([ $LIVE = 1 ] && echo 'LIVE on local ollama' || echo 'pre-baked fast path')"
+talking_point <<'EOF'
+An assessment that used to take a consultant weeks is authored in minutes
+from the client's own brief — on a 3B model running on this laptop. The
+output is not slideware: it is schema-validated YAML with mechanical
+quality gates (degeneracy, dedupe, leakage). The prior period's pulse
+signals ride along as background context — the loop's return edge.
+And the human gate: the client's architect reviews every question before
+it is ever asked.
+EOF
+
+ASSESSMENTS="$(require_repo assessments)"
+BIN="$ASSESSMENTS/target/debug/assessments"
+[ -x "$BIN" ] || die "assessments binary missing — run demo/kit/demo-up"
+
+if [ $LIVE = 1 ]; then
+    require_ollama
+    [ -f "$WORK/pulse-report.json" ] || die "beat 2 --live wants beat 1's pulse report as context — run beat-1-measure-prior first"
+    echo " RUN: assessments author --brief <client brief> --context <pulse report> --out assessment.yaml"
+    echo "      (AI_PROVIDER=ollama, model $OLLAMA_MODEL — local only; this is the slow lane, ~6 min)"
+    AI_PROVIDER=ollama OLLAMA_MODEL="$OLLAMA_MODEL" "$BIN" author \
+        --brief "$ASSESSMENTS/examples/dogfood/brief.md" \
+        --context "$WORK/pulse-report.json" \
+        --out "$WORK/assessment.yaml"
+else
+    echo " RUN: cp prebaked/assessment.yaml -> workdir   (then validate it LIVE)"
+    echo "      provenance: authored 2026-06-12 by this same pipeline on llama3.2"
+    echo "      in 355.9s with zero retries — rerun it yourself with --live"
+    cp "$KIT_DIR/prebaked/assessment.yaml" "$WORK/assessment.yaml"
+fi
+
+evidence "schema validation (live, exit code is the gate)"
+"$BIN" validate "$WORK/assessment.yaml" | sed 's/^/   /'
+echo "   exit code: 0"
+
+evidence "shape (validate -o json)"
+"$BIN" validate "$WORK/assessment.yaml" -o json | jq -r '
+  "   \(.name) — \(.domains) domains, \(.practices | length) practices, \([.practices[].questions] | add) questions",
+  (.practices | group_by(.domain)[] | "   - \(.[0].domain): \([.[].name] | join(", "))")'
+
+echo
+echo " -> artifact for beat 3: $WORK/assessment.yaml"
+beat_end "beat-2-assess$([ $LIVE = 1 ] && echo ' (--live)' || echo ' (pre-baked)')"

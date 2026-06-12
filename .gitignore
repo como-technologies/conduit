@@ -2,6 +2,7 @@
 /.conduit/
 /.secrets/
 /demo/runs/
+/demo/kit/.current
 /docs/book
 *.draft
 .env

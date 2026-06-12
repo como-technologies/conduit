@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Beat 3 — PRESCRIBE. The assessment seeds a playbook of decisions (ADRs);
+# the client's architect accepts the ones they stand behind; each accepted
+# decision carries a STORED implementation plan — AI paid once,
+# deterministic forever.
+#
+# Pre-baked fast path (default): the mechanical (no-AI) import runs live
+# into a scratch corpus inside the workdir, an accept transition runs live,
+# and the stored-plan determinism proof reads the client corpus's accepted
+# decision (whose plan this same pipeline generated and persisted on
+# 2026-06-12). --live replays the whole lane on local ollama: AI flesh-out
+# of every seeded ADR (~4.5 min) + plan generation and save (~40s).
+#
+# The kit never writes to the real playbook checkout: imports land in
+# <workdir>/prescribe/adrs (wiped and rebuilt on re-run — idempotent).
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+WORK="$(workdir)"
+LIVE=0
+[ "${1:-}" = "--live" ] && LIVE=1
+beat_start
+
+banner "BEAT 3 — PRESCRIBE" "$([ $LIVE = 1 ] && echo 'LIVE on local ollama' || echo 'pre-baked fast path')"
+talking_point <<'EOF'
+Findings become decisions. adroit ingests the assessment and seeds one
+proposed ADR per practice — a governed, machine-readable decision corpus,
+not a slide deck. The human gate: nothing is prescribed until the
+client's architect moves a decision to Accepted. Then the key trick —
+each accepted decision carries a STORED implementation plan inside the
+document itself. We pay AI once, at authoring time; every read after
+that is deterministic and provider-free. Watch the same plan come back
+sha-identical with no AI configured at all.
+EOF
+
+[ -x "$ADROIT" ] || die "pinned adroit missing — run demo/kit/demo-up"
+ASSESSMENT="$WORK/assessment.yaml"
+if [ ! -f "$ASSESSMENT" ]; then
+    note "no assessment in the workdir (beat 2 not run) — using the kit's pre-baked one"
+    cp "$KIT_DIR/prebaked/assessment.yaml" "$ASSESSMENT"
+fi
+PLAYBOOK="$(require_repo playbook)"
+
+SCRATCH="$WORK/prescribe/adrs"
+rm -rf "$SCRATCH" && mkdir -p "$SCRATCH"
+
+# ── 1. Import: assessment -> proposed ADRs ─────────────────────────────────
+if [ $LIVE = 1 ]; then
+    require_ollama
+    echo " RUN: adroit import --from-assessment assessment.yaml --ai   (flesh-out on $OLLAMA_MODEL — the slow lane)"
+    ADROIT_AI_PROVIDER=ollama ADROIT_AI_MODEL="$OLLAMA_MODEL" ADROIT_AI_ENABLED=true \
+        "$ADROIT" import --dir "$SCRATCH" --from-assessment "$ASSESSMENT" --ai -o json >"$WORK/import-summary.json"
+else
+    echo " RUN: adroit import --from-assessment assessment.yaml   (mechanical seed — no AI, runs live now)"
+    "$ADROIT" import --dir "$SCRATCH" --from-assessment "$ASSESSMENT" -o json >"$WORK/import-summary.json"
+fi
+
+evidence "seeded decisions (import -o json)"
+jq -r '"   seeded \(.seeded | length) proposed ADR(s), \(.skipped | length) skipped (dedupe guard)"' "$WORK/import-summary.json"
+"$ADROIT" list --dir "$SCRATCH" -o json | jq -r '.[] | "   \(.reference)  \(.title)  [\(.status)]"'
+
+# ── 2. The accept gate: the architect's call, not the machine's ────────────
+echo
+echo " RUN: adroit set-status 1 accepted   (the human gate — the architect accepts the decision)"
+"$ADROIT" set-status 1 accepted --dir "$SCRATCH" | sed 's/^/   /'
+
+# ── 3. The stored plan: AI paid once, deterministic forever ────────────────
+if [ $LIVE = 1 ]; then
+    echo
+    echo " RUN: adroit plan 1 --save   (generate on $OLLAMA_MODEL and persist INTO the ADR document)"
+    ADROIT_AI_PROVIDER=ollama ADROIT_AI_MODEL="$OLLAMA_MODEL" ADROIT_AI_ENABLED=true \
+        "$ADROIT" plan 1 --save --dir "$SCRATCH" >/dev/null
+    PLAN_DIR="$SCRATCH" PLAN_ID=1
+    PROVENANCE="generated seconds ago, persisted into the document"
+else
+    PLAN_DIR="$PLAYBOOK/src/adrs" PLAN_ID=5
+    PROVENANCE="generated + persisted by this pipeline on 2026-06-12 (--live replays it)"
+fi
+
+echo
+echo " RUN: adroit plan $PLAN_ID -o json   — twice, with NO AI environment at all"
+echo "      (corpus: $PLAN_DIR; plan $PROVENANCE)"
+PSHA1="$(env -u ADROIT_AI_PROVIDER -u ADROIT_AI_MODEL -u ADROIT_AI_ENABLED \
+    "$ADROIT" plan "$PLAN_ID" --dir "$PLAN_DIR" -o json 2>/dev/null | tee "$WORK/plan-stored.json" | sha256sum | cut -d' ' -f1)"
+PSHA2="$(env -u ADROIT_AI_PROVIDER -u ADROIT_AI_MODEL -u ADROIT_AI_ENABLED \
+    "$ADROIT" plan "$PLAN_ID" --dir "$PLAN_DIR" -o json 2>/dev/null | sha256sum | cut -d' ' -f1)"
+
+evidence "stored-plan determinism (provider-free double read)"
+jq -r '"   \(.reference): stored = \(.stored)"' "$WORK/plan-stored.json"
+echo "   read 1 sha256: $PSHA1"
+echo "   read 2 sha256: $PSHA2"
+[ "$PSHA1" = "$PSHA2" ] && echo "   SHA-IDENTICAL: yes — no AI was configured for either read" ||
+    die "stored plan reads differed"
+
+evidence "corpus validity (adroit check)"
+"$ADROIT" check --dir "$SCRATCH" -o json | jq -r '"   scratch corpus: \(if .problems == [] or .problems == null then "no problems" else (.problems | length | tostring) + " problems" end)"'
+
+echo
+echo " -> artifact for beat 4: the client corpus's accepted decision + stored plan"
+echo "    ($PLAYBOOK/src/adrs/accepted/, already seeded onto the demo forge)"
+beat_end "beat-3-prescribe$([ $LIVE = 1 ] && echo ' (--live)' || echo ' (pre-baked)')"

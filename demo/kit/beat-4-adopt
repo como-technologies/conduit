@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Beat 4 — ADOPT. conduit works an accepted decision as a reviewable pull
+# request on the client's own forge: scoped by a human label, reviewed by a
+# human, merged by a human. The agent cannot merge — structurally.
+#
+# Default path: stored plan -> issue -> conduit:run gate -> one tick to
+# InReview -> human review + merge -> Merged -> verify 6/6 -> the
+# forge-neutrality transcript diff. All deterministic (FakeEngine), seconds
+# per step. --restart adds the crash sub-beat: kill -9 mid-Coding, recover,
+# audit for duplicates.
+#
+# Idempotent: when the task is already Merged (a re-run), the beat skips
+# straight to re-asserting the evidence (verify reads the forge live).
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+WORK="$(workdir)"
+require_forge
+RESTART=0
+[ "${1:-}" = "--restart" ] && RESTART=1
+beat_start
+
+banner "BEAT 4 — ADOPT" "the human-gated agent lifecycle$([ $RESTART = 1 ] && echo ' + crash/restart')"
+talking_point <<'EOF'
+This is the flagship. conduit takes the accepted decision's STORED plan —
+no AI at runtime — and posts it as an issue on the client's own forge.
+Then it stops. Three human gates, by name: nothing runs until a reviewer
+labels the issue conduit:run (the scope gate); every change arrives as a
+pull request under the client's own review tooling (the review gate); and
+only a human can merge — conduit has no merge method, the gate is
+unrepresentable in its type system (the merge gate). You never have to
+trust an agent; you review a pull request, which your team already knows
+how to do. And when it's merged, we don't claim success — we machine-
+verify it: six contract checks against the live forge.
+EOF
+
+[ -x "$CONDUIT" ] || die "conduit binary missing — run demo/kit/demo-up"
+cd "$WORK"
+
+TASK_STATE="$("$CONDUIT" status -o json | jq -r '.[] | select(.id == "adr-0005") | .state' || true)"
+
+if [ "$TASK_STATE" = "Merged" ]; then
+    note "task adr-0005 is already Merged (idempotent re-run) — re-asserting the evidence live"
+else
+    # ── 1. Plan: a deterministic read of the stored plan, posted for humans ──
+    echo " RUN: conduit plan 5   (stored plan -> forge issue; NO AI environment)"
+    env -u ADROIT_AI_PROVIDER -u ADROIT_AI_MODEL -u ADROIT_AI_ENABLED \
+        "$CONDUIT" plan 5 2> >(sed 's/^/   /' >&2) | sed 's/^/   /'
+
+    # ── 2. The scope gate: a human label, scripted here as the reviewer ──────
+    echo
+    echo " RUN: the reviewer labels the issue conduit:run   (the SCOPE gate — in real life: the forge UI)"
+    (cd "$ROOT" && REPO_NAME=playbook just demo-trigger) | sed 's/^/   /'
+
+    # ── 3. One tick: Scoped -> Coding -> InReview ─────────────────────────────
+    if [ $RESTART = 1 ]; then
+        echo
+        echo " SUB-BEAT: crash mid-Coding (kill -9), then recover with zero duplicate forge actions"
+        echo " RUN: CONDUIT_FAKE_ENGINE_MODE=hang:300 conduit run --once   (engine hangs; we kill the harness)"
+        CONDUIT_FAKE_ENGINE_MODE=hang:300 "$CONDUIT" run --once &
+        CPID=$!
+        for _ in $(seq 1 60); do
+            [ "$(jq -r '.state' .conduit/tasks/adr-0005.json 2>/dev/null)" = "Coding" ] && break
+            sleep 1
+        done
+        [ "$(jq -r '.state' .conduit/tasks/adr-0005.json)" = "Coding" ] || die "task never entered Coding"
+        kill -9 "$CPID" 2>/dev/null
+        wait "$CPID" 2>/dev/null || true
+        evidence "the crash record on disk (write-ahead intent NOT done)"
+        jq -r '"   state: \(.state) | pending: \([.pending[] | "\(.action | keys[0]) done=\(.done)"] | join(", "))"' \
+            .conduit/tasks/adr-0005.json
+        echo
+        echo " RUN: conduit run --once   (recovery: fresh workspace, resumes from the immutable plan snapshot)"
+        "$CONDUIT" run --once 2> >(sed 's/^/   /' >&2)
+        evidence "duplicate audit against the live forge"
+        ISSUES="$(reviewer_api GET "/repos/como/playbook/issues?type=issues&state=all&limit=50" |
+            jq -c '[.[] | select(.body | contains("conduit:task:adr-0005")) | .number]')"
+        PRS="$(reviewer_api GET "/repos/como/playbook/pulls?state=all&limit=50" |
+            jq -c '[.[] | select(.head.ref | startswith("conduit/adr-0005/")) | .number]')"
+        echo "   issues carrying the adr-0005 task marker: $ISSUES (want exactly one)"
+        echo "   PRs with head conduit/adr-0005/*:          $PRS (want exactly one)"
+        [ "$(jq 'length' <<<"$ISSUES")" = 1 ] && [ "$(jq 'length' <<<"$PRS")" = 1 ] ||
+            die "duplicate forge actions detected"
+    else
+        echo
+        echo " RUN: conduit run --once   (one tick: Scoped -> Coding -> InReview)"
+        "$CONDUIT" run --once 2> >(sed 's/^/   /' >&2)
+    fi
+
+    # ── 4. The PR as the forge holds it ───────────────────────────────────────
+    PR="$(jq -r '.pr' .conduit/tasks/adr-0005.json)"
+    evidence "the pull request on the client's forge (the REVIEW gate now holds)"
+    reviewer_api GET "/repos/como/playbook/pulls/$PR" |
+        jq -r '"   PR \(.number): \(.title)\n   labels: \([.labels[].name] | join(", "))\n   head: \(.head.ref)\n   state: \(.state), merged: \(.merged)"'
+
+    # ── 5. Review + merge: human actions (scripted as the reviewer user) ──────
+    echo
+    echo " RUN: the reviewer approves and merges PR $PR   (the MERGE gate — conduit cannot do this)"
+    reviewer_api POST "/repos/como/playbook/pulls/$PR/reviews" '{"event":"APPROVED","body":"LGTM"}' >/dev/null &&
+        echo "   review APPROVED: HTTP 200"
+    reviewer_api POST "/repos/como/playbook/pulls/$PR/merge" '{"Do":"merge"}' >/dev/null &&
+        echo "   merge: HTTP 200"
+
+    echo
+    echo " RUN: conduit run --once   (observes PrMerged -> Merged, closes the issue with the merge sha)"
+    "$CONDUIT" run --once 2> >(sed 's/^/   /' >&2)
+    "$CONDUIT" status | sed 's/^/   /'
+fi
+
+# ── 6. verify: the executable contract, asserted live against the forge ────
+echo
+echo " RUN: conduit verify 5 -o json   (six machine checks on the MERGED PR — no slideware)"
+"$CONDUIT" verify 5 -o json >"$WORK/conduit-verify.json"
+evidence "the tuesday contract, 6/6 (exit 0)"
+jq -r '.checks[] | "   \(if .pass then "PASS" else "FAIL" end)  \(.name)"' "$WORK/conduit-verify.json"
+jq -r '"   overall: pass=\(.pass)  pr=\(.pr)  task=\(.task)"' "$WORK/conduit-verify.json"
+
+# ── 7. Forge neutrality: same lifecycle, byte-identical on another forge ───
+echo
+echo " RUN: conduit demo-transcript 5 --forge gitea|github + diff   (the forge-neutrality money shot)"
+"$CONDUIT" demo-transcript 5 --forge gitea >"$WORK/t-gitea.jsonl"
+"$CONDUIT" demo-transcript 5 --forge github >"$WORK/t-github.jsonl"
+evidence "normalized action transcripts, gitea (live) vs github (DryRun)"
+if diff -q "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" >/dev/null; then
+    echo "   FORGE-NEUTRAL: identical ($(wc -l <"$WORK/t-gitea.jsonl") lines)"
+    sha256sum "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" | sed 's/^/   /'
+else
+    die "transcripts differ between forges"
+fi
+
+echo
+echo " -> artifact for beat 5: $WORK/conduit-verify.json (+ the merged PR on the forge)"
+beat_end "beat-4-adopt$([ $RESTART = 1 ] && echo ' (--restart)')"

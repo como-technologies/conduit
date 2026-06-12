@@ -1,0 +1,691 @@
+id: cc72f80e-37d9-43f5-b608-bf27b1ec139d
+name: Software Engineering Maturity Assessment
+description: Evaluates day-to-day engineering practices of a small-to-mid-size software team
+goal: Identify riskiest gaps in everyday practice and provide prioritized improvement backlog
+domains:
+- id: e7a007dc-e927-4691-96e0-6974a78d09e9
+  name: Delivery Pipeline
+  context: How the team delivers working software
+  value: Fast delivery of high-quality software
+  risk: Delays, rework, and customer dissatisfaction
+  practices:
+  - id: 3db600a6-0aa0-482f-a826-45174774c9b3
+    name: Automated Testing
+    context: Use of automated testing tools
+    value: Reduced testing time and increased test coverage
+    risk: Insufficient test coverage and delayed detection of defects
+    questions:
+    - id: c64059fa-168c-4c0f-979f-5f6662b49cc7
+      text: Are automated tests run as part of the CI/CD pipeline?
+      polarity: positive
+      guidance: Check if automated testing is integrated into the build process
+      evidence: null
+      remediation: null
+    - id: 303a437f-6c02-43f3-b491-db2ef8bf1424
+      text: Is test coverage above 80%?
+      polarity: positive
+      guidance: Review test results and metrics to determine coverage
+      evidence: null
+      remediation: null
+    - id: 6bd882c8-1ecf-4a5b-8bee-70d8e2d3c0d7
+      text: Are automated tests run regularly, such as daily or weekly?
+      polarity: positive
+      guidance: Check if testing is scheduled and executed at regular intervals
+      evidence: null
+      remediation: null
+    - id: e8b7c20c-a2d1-4675-b991-fb119cb258fb
+      text: Is there a documented process for creating and maintaining automated tests?
+      polarity: positive
+      guidance: Review test documentation and processes to ensure they are up-to-date
+      evidence: null
+      remediation: null
+    - id: 073f9807-f4be-45c4-94fc-3467cf987880
+      text: Are automated tests run on all code changes, including pull requests?
+      polarity: positive
+      guidance: Check if testing is integrated into the development workflow
+      evidence: null
+      remediation: null
+    - id: 0351b966-ac42-4f1d-9d97-7f6dd5e626d9
+      text: Is there a clear understanding of what constitutes 'good' test coverage?
+      polarity: negative
+      guidance: Review test metrics and discuss with team members to determine what good coverage looks like
+      evidence: null
+      remediation: null
+    - id: 62710050-75db-4b88-97a7-df740c1bd103
+      text: Are automated tests run on all environments, including staging and production?
+      polarity: positive
+      guidance: Check if testing is executed in all relevant environments
+      evidence: null
+      remediation: null
+    - id: 54210cbe-f371-4b13-8b95-844d93790720
+      text: Is there a process for identifying and addressing test failures?
+      polarity: positive
+      guidance: Review test failure metrics and discuss with team members to determine next steps
+      evidence: null
+      remediation: null
+    - id: bc20ad53-c0b8-46ca-9169-805ab92d4ca1
+      text: Are automated tests run on code changes that introduce new functionality?
+      polarity: positive
+      guidance: Check if testing is integrated into the development workflow
+      evidence: null
+      remediation: null
+    - id: 14d4917c-01bc-48ee-83da-c305c648140f
+      text: Is there a clear understanding of what constitutes 'good' test quality?
+      polarity: negative
+      guidance: Review test metrics and discuss with team members to determine what good quality looks like
+      evidence: null
+      remediation: null
+    - id: 9db490e5-4dd1-4fa1-bf51-df0ed6253598
+      text: Are automated tests run on all types of code changes, including bug fixes and refactors?
+      polarity: positive
+      guidance: Check if testing is integrated into the development workflow
+      evidence: null
+      remediation: null
+    - id: bcdd62c2-7f72-4744-970a-0a58188c8e0d
+      text: Is there a process for reviewing and approving test results?
+      polarity: positive
+      guidance: Review test approval processes to ensure they are up-to-date
+      evidence: null
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  - id: af2cd314-a4a6-4f6d-b3b2-63e43111a33b
+    name: Continuous Integration
+    context: Integration of code changes into the main branch
+    value: Faster feedback to developers and reduced integration risks
+    risk: Increased integration complexity and longer build times
+    questions:
+    - id: 415e173d-a78b-4525-a049-290372aa1f89
+      text: Is automated testing configured for all code changes?
+      polarity: positive
+      guidance: Check for automated test suites and continuous integration pipelines
+      evidence: null
+      remediation: null
+    - id: 0baea151-e73e-4077-b9b0-333a14f01abe
+      text: Are there known issues with integrating new features into the main branch?
+      polarity: negative
+      guidance: Review release notes, changelogs, and error reports to identify potential integration risks
+      evidence: null
+      remediation: Prioritize and address integration issues based on severity and impact
+    - id: a43084b6-9bde-4804-b57d-3dbb1098aa20
+      text: Is continuous integration configured to run automatically on code pushes?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing CI pipeline execution history
+      remediation: null
+    - id: 6ce784bd-54f4-4ee1-aa84-82c173b5a689
+      text: Are there automated tests for critical business logic?
+      polarity: positive
+      guidance: Review test coverage reports and identify areas with low test coverage
+      evidence: null
+      remediation: null
+    - id: 25b51f27-b5b5-4d0e-8590-bade64daf03b
+      text: Is the main branch always up-to-date with the latest code changes?
+      polarity: negative
+      guidance: Check for out-of-date branches or stale commits
+      evidence: null
+      remediation: Merge latest code changes into the main branch regularly
+    - id: 8e0f6a33-9729-459d-9af5-97e16c779cdb
+      text: Are there automated checks for code quality and security?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing code quality metrics
+      remediation: null
+    - id: 4edabf0d-83e2-43e3-b542-4b340dc35580
+      text: Is continuous integration configured to run on a schedule (e.g., daily, weekly)?
+      polarity: positive
+      guidance: Check CI pipeline schedules and ensure regular execution
+      evidence: null
+      remediation: null
+    - id: 6aed2e39-15e0-419a-ac4d-4b6402ccd153
+      text: Are there automated tests for user acceptance criteria (UAC)?
+      polarity: positive
+      guidance: Review UAC test plans and identify areas with low test coverage
+      evidence: null
+      remediation: null
+    - id: 808aeb03-23c6-457c-b5cd-3170a0c52433
+      text: Is the continuous integration process documented and shared with team members?
+      polarity: positive
+      guidance: null
+      evidence: Documentation of CI pipeline configuration and execution history
+      remediation: null
+    - id: d9d572e0-f7c6-4a23-ab23-22403c440b7e
+      text: Are there automated checks for dependencies and libraries?
+      polarity: positive
+      guidance: Check dependency reports and ensure all dependencies are up-to-date
+      evidence: null
+      remediation: null
+    - id: f7b00522-ef64-44cf-a510-57f0227f4ed3
+      text: Is continuous integration configured to run on multiple environments (e.g., dev, staging, prod)?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing environment-specific CI pipeline execution history
+      remediation: null
+    - id: 97a218fa-4a50-412a-aef3-b7bfeddde928
+      text: Are there automated tests for deployment scripts?
+      polarity: positive
+      guidance: Review deployment test plans and identify areas with low test coverage
+      evidence: null
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  terminology: null
+- id: aed87012-1f69-46c0-a3dc-df046f6fd150
+  name: Code Quality
+  context: How the team maintains code quality
+  value: High-quality, maintainable codebase
+  risk: Technical debt, bugs, and security vulnerabilities
+  practices:
+  - id: 3364cb34-bfc5-49b3-9485-3f116b58320b
+    name: Code Reviews
+    context: Regular review of code changes by peers
+    value: Improved code quality, reduced bugs, and increased knowledge sharing
+    risk: Inadequate code reviews leading to technical debt
+    questions:
+    - id: 62d0d59d-d873-4ed1-bd08-0bfa3e66e4e7
+      text: Are code reviews required before merging changes into the main branch?
+      polarity: positive
+      guidance: Check the team's coding standards and guidelines
+      evidence: null
+      remediation: null
+    - id: 0afae10c-023c-4e66-b65e-6c306d1537f8
+      text: Do you have automated tests to verify the correctness of your code?
+      polarity: positive
+      guidance: null
+      evidence: Test coverage reports showing >90% coverage
+      remediation: null
+    - id: 79c5bc11-cff9-4834-8ca2-da03c75db86e
+      text: Are there documented deployment procedures for our application?
+      polarity: positive
+      guidance: Review the team's deployment scripts and documentation
+      evidence: null
+      remediation: null
+    - id: 671a2dc2-aead-4672-973f-5e235c49f177
+      text: Do you have a process in place to review and address technical debt?
+      polarity: positive
+      guidance: null
+      evidence: Codebase analysis showing significant debt reduction over time
+      remediation: null
+    - id: b20f2341-0d2d-40da-bf74-d4c510f28188
+      text: Are code reviews conducted regularly, ideally within 24 hours of code check-in?
+      polarity: positive
+      guidance: Check the team's commit frequency and review schedule
+      evidence: null
+      remediation: null
+    - id: 4340a05b-06ca-4b15-b046-a14d0f41c757
+      text: Do you have a clear understanding of the coding standards and guidelines for our project?
+      polarity: positive
+      guidance: null
+      evidence: Code review feedback indicating adherence to standards
+      remediation: null
+    - id: e466f45e-c51d-44fa-b07b-6647195af426
+      text: Are there opportunities for peer feedback and knowledge sharing during code reviews?
+      polarity: positive
+      guidance: Review team's communication channels and collaboration tools
+      evidence: null
+      remediation: null
+    - id: 84e335ff-202b-45a2-909a-51059316bca9
+      text: Do you have a process in place to handle conflicts or disagreements during code reviews?
+      polarity: positive
+      guidance: null
+      evidence: Code review history showing successful conflict resolution
+      remediation: null
+    - id: cb037aa7-fc25-4abf-b15d-b174385456e1
+      text: Are there automated checks for common coding errors, such as syntax or formatting issues?
+      polarity: positive
+      guidance: Review the team's automated testing suite and error handling mechanisms
+      evidence: null
+      remediation: null
+    - id: 0a1e9528-3256-4c20-bc2e-70478907a308
+      text: Do you have a clear understanding of the project's technical debt and its impact on the codebase?
+      polarity: positive
+      guidance: null
+      evidence: Codebase analysis showing significant debt reduction over time
+      remediation: null
+    - id: 26d7cd9b-0a20-47f2-9e65-0a41c84733e6
+      text: Are there opportunities for junior developers to participate in code reviews and learn from more experienced team members?
+      polarity: positive
+      guidance: Review team's mentorship programs and knowledge sharing initiatives
+      evidence: null
+      remediation: null
+    - id: a87e7129-35ff-410a-9369-478587970b40
+      text: Do you have a process in place to address security vulnerabilities or known issues in the codebase?
+      polarity: negative
+      guidance: Review the team's vulnerability scanning and patching processes
+      evidence: null
+      remediation: Prioritize and address vulnerabilities based on severity
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  - id: 3e3ff255-4b13-4fb6-b15a-c8a73fc45ee2
+    name: Refactoring
+    context: Regular refactoring of existing codebase
+    value: Reduced technical debt, improved maintainability, and increased performance
+    risk: Insufficient refactoring leading to technical debt buildup
+    questions:
+    - id: c6771ae6-3466-4069-9af0-e805bcc11747
+      text: Are automated tests included in the refactored codebase?
+      polarity: positive
+      guidance: Check for test coverage metrics and automated testing frameworks
+      evidence: null
+      remediation: null
+    - id: 2b2f5055-3f00-488c-b93a-3ef63c90172d
+      text: Is there a documented process for handling technical debt?
+      polarity: positive
+      guidance: null
+      evidence: Presence of a 'tech debt' section in the codebase's documentation
+      remediation: null
+    - id: 31bb485b-bf2a-4bff-af0c-268ee6b72733
+      text: Are refactored components properly reviewed by peers?
+      polarity: positive
+      guidance: Check for peer review comments and feedback on code changes
+      evidence: null
+      remediation: null
+    - id: 5eb2bef4-1019-4d1e-83d8-bdf079e468d9
+      text: Is there a clear plan for addressing technical debt in the near future?
+      polarity: positive
+      guidance: null
+      evidence: Presence of a 'tech debt' section in the organization's roadmap or quarterly plans
+      remediation: null
+    - id: 2b1344c5-d9a9-41cd-a631-4897cbbff546
+      text: Are refactored components properly tested?
+      polarity: positive
+      guidance: Check for test coverage metrics and automated testing frameworks
+      evidence: null
+      remediation: null
+    - id: 598991d5-376d-4193-970c-169d756f9190
+      text: Is there a clear understanding of the impact of technical debt on the codebase?
+      polarity: negative
+      guidance: Review documentation and discussions around technical debt to understand its implications
+      evidence: null
+      remediation: null
+    - id: a37d7f3b-e446-41e8-b244-81d3ed7ffe39
+      text: Are refactored components properly documented?
+      polarity: positive
+      guidance: null
+      evidence: Presence of clear and concise documentation for refactored components
+      remediation: null
+    - id: 60960390-895b-409b-b321-6f7aca1adab0
+      text: Is there a process in place for handling conflicts between competing priorities?
+      polarity: negative
+      guidance: Review the organization's prioritization framework to understand potential conflicts
+      evidence: null
+      remediation: null
+    - id: ab6b1af1-1761-46e1-81b0-17d36d98be58
+      text: Are refactored components properly reviewed by stakeholders?
+      polarity: positive
+      guidance: null
+      evidence: Presence of stakeholder feedback and approval on code changes
+      remediation: null
+    - id: f52d7926-e1f4-4b5e-b0c1-6aafee113e59
+      text: Is there a clear understanding of the benefits of regular refactoring?
+      polarity: positive
+      guidance: Review documentation and discussions around the benefits of regular refactoring
+      evidence: null
+      remediation: null
+    - id: 62acb82b-14cd-4c5b-aa51-653ff0154e80
+      text: Are refactored components properly integrated with existing systems?
+      polarity: positive
+      guidance: null
+      evidence: Presence of integration tests and automated testing frameworks
+      remediation: null
+    - id: 79b3c634-6366-4fa5-bc8a-bd4f0c4eefa4
+      text: Is there a process in place for handling technical debt that is not immediately apparent?
+      polarity: negative
+      guidance: Review the organization's prioritization framework to understand potential hidden technical debt
+      evidence: null
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  terminology: null
+- id: 9802ac58-c358-42de-8a4d-9147fb3c6e1a
+  name: Testing
+  context: How the team approaches testing
+  value: Comprehensive testing strategy with adequate test coverage
+  risk: Inadequate test coverage leading to undetected defects and customer dissatisfaction
+  practices:
+  - id: 701a1ee4-8045-4ac7-ba94-4a00eceedd08
+    name: Unit Testing
+    context: Use of unit tests to verify individual components
+    value: Reduced bugs, improved code quality, and increased confidence in code changes
+    risk: Insufficient unit testing leading to undetected defects
+    questions:
+    - id: 160c9766-a1f5-41f7-bd58-8a2604b3ee4c
+      text: Are unit tests written for all new code changes?
+      polarity: positive
+      guidance: Check for automated testing frameworks and unit test coverage
+      evidence: null
+      remediation: null
+    - id: 83dfee5c-ad10-4be3-86f4-c167b3091508
+      text: Do you have a continuous integration/continuous deployment (CI/CD) pipeline that runs unit tests?
+      polarity: positive
+      guidance: null
+      evidence: Pipeline showing successful unit test execution
+      remediation: null
+    - id: 4ef0a752-d013-4256-ac61-1da9902b7745
+      text: Are there any known defects in the codebase that were not caught by unit testing?
+      polarity: negative
+      guidance: Review defect reports and bug tracking data
+      evidence: null
+      remediation: Prioritize and address defects based on severity
+    - id: de655f3f-587c-46bd-bb9b-ed9649a40949
+      text: Do you have a process for reviewing and approving unit test results?
+      polarity: positive
+      guidance: null
+      evidence: Test review checklist or approval workflow
+      remediation: null
+    - id: a1cbeac9-dd5f-48ae-a1e2-f5e2f3d9819d
+      text: Are there any automated tests that are not currently running as part of the CI/CD pipeline?
+      polarity: negative
+      guidance: Review pipeline configuration and test suite
+      evidence: null
+      remediation: Add missing tests to the pipeline
+    - id: c4283f6b-ef1d-411a-a4a2-39cca455b34c
+      text: Do you have a code coverage target for unit tests?
+      polarity: positive
+      guidance: null
+      evidence: Code coverage report showing target percentage
+      remediation: null
+    - id: ca9ba46c-055e-49be-8c7c-a5d6d240c9d6
+      text: Are there any known issues with the testing framework or tools used for unit testing?
+      polarity: negative
+      guidance: Review documentation and community forums
+      evidence: null
+      remediation: Update testing framework or tools to latest version
+    - id: ed3f454a-ab74-4b9a-a481-b4170487e043
+      text: Do you have a process for refactoring code that affects unit tests?
+      polarity: positive
+      guidance: null
+      evidence: Refactoring checklist or automated refactoring tool
+      remediation: null
+    - id: 46ad97c0-eaee-42b5-9695-2fd636f543ce
+      text: Are there any unit tests that are not currently passing?
+      polarity: negative
+      guidance: Review test results and debug failed tests
+      evidence: null
+      remediation: Fix failing tests and re-run pipeline
+    - id: 6874039a-101d-41ea-8e40-c53cd558073a
+      text: Do you have a code review process that includes reviewing unit tests?
+      polarity: positive
+      guidance: null
+      evidence: Code review checklist or automated code review tool
+      remediation: null
+    - id: 03f21c9a-63a1-492c-a9c3-4aa7e272723d
+      text: Are there any known security vulnerabilities in the codebase that were not caught by unit testing?
+      polarity: negative
+      guidance: Review vulnerability reports and bug tracking data
+      evidence: null
+      remediation: Prioritize and address vulnerabilities based on severity
+    - id: 39107d67-e080-45cf-9ec1-7dfce145e400
+      text: Do you have a process for maintaining and updating unit tests over time?
+      polarity: positive
+      guidance: null
+      evidence: Test maintenance checklist or automated test update tool
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  - id: 2658a508-e727-4bd4-ba08-1b498f878377
+    name: Integration Testing
+    context: Use of integration tests to verify interactions between components
+    value: Improved test coverage, reduced integration risks, and increased confidence in code changes
+    risk: Inadequate integration testing leading to undetected integration issues
+    questions:
+    - id: 777b3d1a-65a4-480a-9342-867e43296790
+      text: Are integration tests included in the code review process?
+      polarity: positive
+      guidance: Check if automated testing frameworks are used during code reviews
+      evidence: null
+      remediation: null
+    - id: 8973f49e-5f5a-4e9d-892e-c62ccb6264c1
+      text: Do you have a documented process for identifying and addressing integration issues?
+      polarity: positive
+      guidance: Review existing documentation on integration testing and issue resolution
+      evidence: null
+      remediation: null
+    - id: 2594cff8-6cf4-4780-82ff-f7e0ae7eef62
+      text: Are there automated tests in place to verify interactions between components?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing test coverage metrics
+      remediation: null
+    - id: dbca27e4-d1bc-4e87-b4a2-74ac7205e4b2
+      text: Do you have a clear understanding of the dependencies between components?
+      polarity: positive
+      guidance: Review component documentation and diagrams
+      evidence: null
+      remediation: null
+    - id: 0a87d2a5-ac53-4c01-a554-29a3ff19c9e2
+      text: Are integration tests run regularly as part of the CI/CD pipeline?
+      polarity: positive
+      guidance: null
+      evidence: CI/CD pipeline configuration files
+      remediation: null
+    - id: 1f4484fc-ac59-4350-8bbb-38d6ac7ddd82
+      text: Do you have a process for verifying that changes to one component do not break interactions with other components?
+      polarity: positive
+      guidance: Review existing documentation on integration testing and change management
+      evidence: null
+      remediation: null
+    - id: f53722af-5afc-475c-bb66-8718fe316ffd
+      text: Are there any known integration issues or defects in the current codebase?
+      polarity: negative
+      guidance: Review defect tracking systems and known issues lists
+      evidence: null
+      remediation: Prioritize and address known integration issues based on severity
+    - id: d45f5c2e-a5e3-45cb-be08-8dc5e80b6cf8
+      text: Do you have a clear understanding of the testing goals and objectives for each component?
+      polarity: positive
+      guidance: Review component documentation and testing plans
+      evidence: null
+      remediation: null
+    - id: 004945f1-03d3-4f79-a4a5-9330b346dda2
+      text: Are there automated tests in place to verify that changes to one component do not break interactions with other components?
+      polarity: positive
+      guidance: null
+      evidence: Test coverage metrics
+      remediation: null
+    - id: 071438a4-9a30-47ca-aa35-f97cbddc7406
+      text: Do you have a process for verifying that the integration tests are comprehensive enough?
+      polarity: positive
+      guidance: Review existing documentation on integration testing and test coverage
+      evidence: null
+      remediation: null
+    - id: 08cd9f45-64a1-470d-a043-fae197b87754
+      text: Are there any known risks or vulnerabilities in the current integration testing process?
+      polarity: negative
+      guidance: Review risk assessment reports and vulnerability scanning results
+      evidence: null
+      remediation: Prioritize and address known risks and vulnerabilities based on severity
+    - id: afeb572a-f6dc-430e-9ee5-a004fe1578c7
+      text: Do you have a clear understanding of the impact of integration issues on the overall system?
+      polarity: positive
+      guidance: Review existing documentation on system architecture and integration testing
+      evidence: null
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  terminology: null
+- id: b304901d-d63c-4b7e-b68d-7ace21175e3b
+  name: Operations
+  context: How the team manages operations and maintenance
+  value: Proactive monitoring, automated deployment, and efficient incident management
+  risk: Inefficient incident management, delayed deployment, and customer dissatisfaction
+  practices:
+  - id: 61a3ad70-e4f5-4ed3-9da8-b3cf249deefc
+    name: Monitoring
+    context: Regular monitoring of system performance and health
+    value: Improved system reliability, reduced downtime, and increased confidence in system stability
+    risk: Insufficient monitoring leading to undetected issues and delayed response times
+    questions:
+    - id: d0ba9907-2718-4c9e-ac6c-81f97e0cebd4
+      text: Are automated monitoring tools configured to collect performance metrics?
+      polarity: positive
+      guidance: Check for tooling like Prometheus, Grafana, or Datadog
+      evidence: null
+      remediation: null
+    - id: 327cc3a9-a177-4e11-a8a4-480231c3dd3a
+      text: Do you have a documented incident response process in place?
+      polarity: positive
+      guidance: Review your team's on-call schedule and emergency contact list
+      evidence: null
+      remediation: null
+    - id: e3f91b7d-42a6-45f1-ae0f-1a092837e35f
+      text: Are there any known issues with system performance that are currently being addressed?
+      polarity: negative
+      guidance: Check for open tickets or JIRA issues related to performance
+      evidence: null
+      remediation: Prioritize and address the issue as soon as possible
+    - id: 24e2868f-8f12-4c0e-a699-a5e8464920a8
+      text: Is monitoring configured for all critical services?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing service health metrics
+      remediation: null
+    - id: 5186727d-845b-43e7-99e3-b1a4aabb7082
+      text: Do you have a system in place to alert on unusual behavior or anomalies?
+      polarity: positive
+      guidance: Review your alerting tools like PagerDuty or Splunk
+      evidence: null
+      remediation: null
+    - id: fa5ebb04-b817-4001-829b-c398a1db3a8c
+      text: Are there any manual steps that could be automated for monitoring and incident response?
+      polarity: negative
+      guidance: Review your team's processes and identify opportunities for automation
+      evidence: null
+      remediation: Implement automation where possible to reduce manual effort
+    - id: 1ec3388f-9acd-46ec-b876-c83bd246de6d
+      text: Is there a documented process for reviewing and analyzing system logs?
+      polarity: positive
+      guidance: Check for log review tools like ELK or Splunk
+      evidence: null
+      remediation: null
+    - id: a2efc834-e621-4da7-99da-721ca7f0a6d5
+      text: Do you have a system in place to track and measure key performance indicators (KPIs)?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing KPI metrics
+      remediation: null
+    - id: 513a1967-89ea-4214-b7aa-5fb22a98b65a
+      text: Are there any known security vulnerabilities that need to be addressed?
+      polarity: negative
+      guidance: Check for vulnerability scans or security reports
+      evidence: null
+      remediation: Prioritize and address the vulnerability as soon as possible
+    - id: 72c4a487-580c-45cf-8dc0-2228a2c3f370
+      text: Is monitoring configured for all user-facing services?
+      polarity: positive
+      guidance: null
+      evidence: Dashboard showing service health metrics
+      remediation: null
+    - id: 117fd9ee-a698-4db2-8c67-bcf1aea458bb
+      text: Do you have a system in place to track and measure system uptime and availability?
+      polarity: positive
+      guidance: Review your uptime monitoring tools like UptimeRobot or Pingdom
+      evidence: null
+      remediation: null
+    - id: db2b0c34-5cd3-4994-869a-c4d8b4397c7e
+      text: Are there any manual steps that could be automated for monitoring and incident response?
+      polarity: negative
+      guidance: Review your team's processes and identify opportunities for automation
+      evidence: null
+      remediation: Implement automation where possible to reduce manual effort
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  - id: 4029e0f9-905f-4e6d-83d8-90f51a5595fd
+    name: Incident Management
+    context: Proactive management of incidents and errors
+    value: Reduced mean time to resolve (MTTR), improved customer satisfaction, and increased confidence in incident handling
+    risk: Inadequate incident management leading to prolonged downtime and customer dissatisfaction
+    questions:
+    - id: 47d832be-dee5-4153-9fc4-bd84ed81723d
+      text: Are automated incident response tools configured and accessible to the team?
+      polarity: positive
+      guidance: Check if incident response teams have access to automation tools like PagerDuty or Splunk
+      evidence: null
+      remediation: null
+    - id: fc8893ba-a8a5-4a89-8dc2-af7f82a113db
+      text: Do you have a documented process for escalating incidents to management?
+      polarity: positive
+      guidance: Review your organization's escalation procedures and ensure they are up-to-date
+      evidence: null
+      remediation: null
+    - id: 8935df2d-ebe9-4769-b997-b46235ae87a4
+      text: Are there clear communication channels established between teams during an incident?
+      polarity: positive
+      guidance: Check if team members know who to contact in case of an incident and that communication plans are in place
+      evidence: null
+      remediation: null
+    - id: 82070ae9-80cd-4180-81a2-882ab289d0ec
+      text: Is the incident response team trained on the latest tools and technologies?
+      polarity: positive
+      guidance: Review training records and ensure team members have completed recent training sessions
+      evidence: null
+      remediation: null
+    - id: 4153b2ac-adaa-4ace-aa5f-4d176616b687
+      text: Are there clear metrics for measuring incident response effectiveness?
+      polarity: positive
+      guidance: Check if your organization tracks key performance indicators (KPIs) like MTTR or resolution rates
+      evidence: null
+      remediation: null
+    - id: fdfd2e0d-62e4-4028-81d1-3ad7b2594ee9
+      text: Do you have a process in place for reviewing and learning from past incidents?
+      polarity: positive
+      guidance: Review incident reports and identify areas for improvement to inform future incident response strategies
+      evidence: null
+      remediation: null
+    - id: 9ee55cee-5449-474a-ad45-a8508a8023ce
+      text: Are there clear roles and responsibilities defined for incident response team members?
+      polarity: positive
+      guidance: Check if your organization has a clear understanding of who is responsible for what during an incident
+      evidence: null
+      remediation: null
+    - id: 5667e0e4-cfc4-4a72-948c-c9a86db9315f
+      text: Is the incident response process aligned with organizational goals and objectives?
+      polarity: positive
+      guidance: Review how incidents are impacting business outcomes and adjust processes as needed
+      evidence: null
+      remediation: null
+    - id: a727c215-09c8-4813-8688-abd7ec57efdb
+      text: Are there adequate resources allocated to support incident response efforts?
+      polarity: negative
+      guidance: Check if your organization has sufficient personnel, equipment, and budget to respond to incidents effectively
+      evidence: null
+      remediation: null
+    - id: 475ae8e9-87d5-47b1-a2e6-280f85bc6585
+      text: Do you have a process in place for documenting and sharing knowledge gained from past incidents?
+      polarity: positive
+      guidance: Review how your organization shares lessons learned from past incidents with the team
+      evidence: null
+      remediation: null
+    - id: ee2b7df0-0516-4728-a20f-1f8c760a539d
+      text: Are there clear procedures for restoring systems and services after an incident?
+      polarity: positive
+      guidance: Check if your organization has a clear understanding of how to restore systems and services after an incident
+      evidence: null
+      remediation: null
+    - id: 16998873-8080-4832-8081-36fed0ba9769
+      text: Is the incident response process integrated into the organization's overall risk management strategy?
+      polarity: positive
+      guidance: Review how incidents are impacting business outcomes and adjust processes as needed to align with organizational risk management goals
+      evidence: null
+      remediation: null
+    guidance: null
+    roles: []
+    effort: null
+    terminology: null
+  terminology: null
+created_at: 1970-01-01T00:00:00Z
+updated_at: 1970-01-01T00:00:00Z
