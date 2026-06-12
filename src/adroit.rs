@@ -182,11 +182,26 @@ impl AdrSource {
     /// Every subprocess goes through this chokepoint: rejects non-allowlisted
     /// subcommands BEFORE spawning; sets ADROIT_DIR env (the env form of --dir —
     /// conduit always uses the env form, spec §Demo script).
+    ///
+    /// The child env is CONSTRUCTED, not inherited: forge tokens
+    /// (CONDUIT_GITEA_TOKEN, GITHUB_TOKEN, ...) must never reach the adroit
+    /// subprocess — it has no business with the forge. Kept: PATH (adroit
+    /// shells out to git), HOME (git config), plus the intended ADROIT_* vars.
     fn run_adroit(&self, subcommand: &str, args: &[&str]) -> Result<Vec<u8>, AdroitError> {
         if !ALLOWED_SUBCOMMANDS.contains(&subcommand) {
             return Err(AdroitError::Disallowed(subcommand.to_string()));
         }
         let mut cmd = std::process::Command::new(&self.bin);
+        cmd.env_clear();
+        for keep in ["PATH", "HOME"] {
+            if let Ok(v) = std::env::var(keep) {
+                cmd.env(keep, v);
+            }
+        }
+        // A hung or runaway `plan` (fresh generation only — stored reads are
+        // instant) currently blocks the caller; TODO(timeout): reuse the
+        // engine deadline mechanism from Task 11 here.
+        cmd.stdin(std::process::Stdio::null());
         cmd.env("ADROIT_DIR", &self.dir)
             .envs(self.ai_env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
             .arg(subcommand)
