@@ -67,10 +67,10 @@ fn run_git_ok<S: AsRef<std::ffi::OsStr>>(
         Err(GitError::Command {
             args: args
                 .iter()
-                .map(|a| a.as_ref().to_string_lossy().into_owned())
+                .map(|a| redact_userinfo(&a.as_ref().to_string_lossy()))
                 .collect(),
             code: out.status.code(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+            stderr: redact_userinfo(&String::from_utf8_lossy(&out.stderr)),
         })
     }
 }
@@ -172,7 +172,7 @@ pub fn commit_all_except_task_file_with_env(
             return Err(GitError::Command {
                 args: vec!["diff".into(), "--cached".into(), "--quiet".into()],
                 code,
-                stderr: String::from_utf8_lossy(&diff.stderr).into_owned(),
+                stderr: redact_userinfo(&String::from_utf8_lossy(&diff.stderr)),
             });
         }
     }
@@ -241,6 +241,40 @@ pub fn is_local_remote(url: &str) -> bool {
     }
 }
 
+/// Redact `user:password@` userinfo from any `scheme://user:secret@host`
+/// occurrences in `s`, replacing with `scheme://$REDACTED@host`. Operates on
+/// the whole string so it catches URLs embedded in args or git stderr. A URL
+/// with no userinfo is returned unchanged.
+pub(crate) fn redact_userinfo(s: &str) -> String {
+    // Find every `://` and check whether what follows looks like `user:pass@`.
+    // We scan left-to-right and build the output incrementally.
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(sep) = rest.find("://") {
+        // Emit everything up to and including `://`.
+        out.push_str(&rest[..sep + 3]);
+        rest = &rest[sep + 3..];
+        // Authority ends at the first `/`, `?`, `#`, or end-of-string.
+        let auth_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let authority = &rest[..auth_end];
+        if let Some(at_pos) = authority.rfind('@') {
+            let userinfo = &authority[..at_pos];
+            // Only redact if there is a `:` in userinfo (i.e. user:password).
+            if userinfo.contains(':') {
+                out.push_str("$REDACTED@");
+                out.push_str(&authority[at_pos + 1..]);
+            } else {
+                out.push_str(authority);
+            }
+        } else {
+            out.push_str(authority);
+        }
+        rest = &rest[auth_end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,6 +319,66 @@ mod tests {
         let url = bare.to_str().unwrap().to_string();
         (d, url)
     }
+
+    // ── redact_userinfo tests ──────────────────────────────────────────────
+
+    #[test]
+    fn redact_userinfo_url_in_arg() {
+        let s = "http://conduit-bot:secret123@localhost:3000/como/x.git";
+        let out = redact_userinfo(s);
+        assert_eq!(out, "http://$REDACTED@localhost:3000/como/x.git");
+        assert!(!out.contains("secret123"), "token must not appear");
+    }
+
+    #[test]
+    fn redact_userinfo_url_in_stderr() {
+        let s = "fatal: unable to access 'http://conduit-bot:tok42@localhost:3000/x.git/': \
+                 Could not resolve host";
+        let out = redact_userinfo(s);
+        assert!(
+            out.contains("$REDACTED@localhost"),
+            "userinfo must be redacted: {out}"
+        );
+        assert!(!out.contains("tok42"), "token must not appear: {out}");
+    }
+
+    #[test]
+    fn redact_userinfo_no_userinfo_passthrough() {
+        let s = "http://localhost:3000/como/x.git";
+        assert_eq!(
+            redact_userinfo(s),
+            s,
+            "URL without userinfo must pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn redact_userinfo_multiple_occurrences() {
+        let s = "push http://bot:t1@localhost/a.git and fetch http://bot:t2@localhost/b.git";
+        let out = redact_userinfo(s);
+        assert!(
+            !out.contains("t1") && !out.contains("t2"),
+            "both tokens must vanish: {out}"
+        );
+        assert_eq!(
+            out.matches("$REDACTED@").count(),
+            2,
+            "two redactions expected: {out}"
+        );
+    }
+
+    #[test]
+    fn redact_userinfo_user_only_no_password_passthrough() {
+        // `user@host` with no `:password` — not a credential, leave as-is.
+        let s = "http://conduit-bot@localhost:3000/x.git";
+        assert_eq!(
+            redact_userinfo(s),
+            s,
+            "user-only (no colon) authority must not be redacted"
+        );
+    }
+
+    // ── is_local_remote / push tests ──────────────────────────────────────
 
     #[test]
     fn is_local_remote_guard() {
