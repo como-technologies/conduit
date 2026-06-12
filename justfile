@@ -34,6 +34,11 @@ check:
 run *ARGS:
     cargo run -- {{ARGS}}
 
+# Build the pinned adroit into .conduit/bin (no network: file:// + --locked)
+init-adroit:
+    cargo install --git file:///home/brett/repos/como-tech/adroit --rev $(cat adroit.rev) --locked --root .conduit adroit
+    .conduit/bin/adroit manifest -o json > /dev/null && echo "adroit handshake OK"
+
 # Throwaway Gitea on localhost:3000 — two users, labels, seeded repo
 forge-up:
     docker compose -f demo/docker-compose.yml up -d

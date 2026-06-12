@@ -1,0 +1,10 @@
+#!/bin/sh
+# Hermetic adroit stand-in: emits canned JSON per subcommand. The real pinned
+# binary is exercised behind CONDUIT_E2E_ADROIT=1 (tests/adroit_contract.rs).
+case "$1" in
+  manifest) echo '{"tool": "adroit", "manifest_schema": 1, "extra": "tolerated"}' ;;
+  list) cat "${FAKE_ADROIT_LIST:-/dev/null}" ;;
+  show) cat "${FAKE_ADROIT_SHOW:-/dev/null}" ;;
+  plan) cat "${FAKE_ADROIT_PLAN:-/dev/null}" ;;
+  *) echo "unknown subcommand $1" >&2; exit 2 ;;
+esac
