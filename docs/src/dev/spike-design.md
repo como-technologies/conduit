@@ -60,7 +60,7 @@ conduit/
 ├── demo/docker-compose.yml  throwaway Gitea (localhost:3000, named volume, disposable)
 ├── demo/gitea-init.sh     two-user bootstrap (see Dogfood), labels, seeded repo
 ├── src/main.rs            thin binary: clap marshalling + human rendering
-├── src/cli.rs             init | sync | plan <address> | run [--once] | status | verify | demo-transcript
+├── src/cli.rs             init | plan <address> | run [--once] | status | verify <address> | demo-transcript
 ├── src/config.rs          conduit.toml + env overlay
 ├── src/forge/mod.rs       THE KEYSTONE: trait Forge, snapshot types, shared pure diff()
 ├── src/forge/github.rs    GitHub REST v3 (live reads; mutations always decorated by dry_run)
@@ -180,6 +180,16 @@ InReview ──(PrMerged — HUMAN merges in forge UI)──▶ Merged (terminal
 InReview ──(PrClosed without merge — HUMAN)──▶ Abandoned (terminal)     close issue w/ comment
 ```
 
+**`PrMerged`/`PrClosed` are must-act from *any* non-terminal state whose task
+has an open PR** (`InReview`, `Revising`, and `Failed`-after-a-PR-exists) —
+the diff is edge-triggered and the cursor advances, so an ignored terminal
+event would wedge the task forever. A `Revising` task whose PR merges or
+closes mid-engine-run transitions immediately; the in-flight engine result is
+discarded and its workspace disposed. **`CiChanged` is must-ignore in every
+state for the spike** — conduit consumes the event type but takes no action on
+it (wiring CI failure into `Revising` would bypass the human gate); it exists
+so the snapshot/diff layer is proven against CI-bearing forges.
+
 `machine::step(&TaskRecord, &Event) -> Transition { next, actions }` is a pure
 function — zero I/O, exhaustive match, table-tested over every (state, event)
 pair including must-ignore cells. `Action` spans forge calls, `RunEngine`, and
@@ -213,7 +223,8 @@ pub struct TaskSpec {
     pub title: String,
     pub adr_body: String,                 // AdrDetail body markdown
     pub plan_markdown: String,            // the VERBATIM persisted plan snapshot
-    pub review_feedback: Option<String>,  // concatenated ChangesRequested bodies (Revising)
+    pub review_feedback: Option<String>,  // ChangesRequested bodies of the CURRENT round only:
+                                          // reviews received since the task last entered InReview
     pub workspace: PathBuf,               // already on branch conduit/<ref-lower>/<slug>
 }
 pub enum EngineOutcome { Completed { summary: String }, Failed { reason: String, log_tail: String } }
@@ -330,7 +341,8 @@ repo, and pre-creates the five `effort:*` + `conduit:*` labels.
 ```sh
 just init && just init-adroit          # toolchain; pinned adroit → .conduit/bin (manifest handshake)
 just forge-up                          # throwaway Gitea on localhost:3000, two users, labels, seeded repo
-.conduit/bin/adroit --dir adr list --status accepted -o json    # the dogfood input: conduit's own ADRs
+ADROIT_DIR=adr .conduit/bin/adroit list --status accepted -o json   # the dogfood input: conduit's own ADRs
+                                       # (ADROIT_DIR is the env form of --dir; conduit always uses the env form)
 
 conduit plan 3 --forge gitea           # handshake → show 3 → ENFORCE Accepted → adroit plan 3 (ollama)
                                        # → persist plan VERBATIM → issue on Gitea (plan body, adr: label). Scoped.
@@ -345,6 +357,7 @@ cat .conduit/tasks/*.json              # the whole lifecycle, inspectable as fil
 # plan snapshot; crash-replay probes mean no duplicate issue/PR/comment.
 
 conduit verify 3 --forge gitea -o json # closing beat: machine-asserts the tuesday contract on the merged PR
+                                       # (tasks are addressed by ADR address while one ADR = one task holds)
 
 # THE FORGE-NEUTRALITY MONEY SHOT — same scripted scenario, two adapters, identical normalized stream:
 conduit demo-transcript 3 --forge gitea            > /tmp/t-gitea.jsonl
