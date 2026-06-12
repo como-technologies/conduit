@@ -1,3 +1,6 @@
+use clap::Parser;
+
 fn main() -> anyhow::Result<()> {
-    Ok(())
+    let cli = conduit::cli::Cli::parse();
+    conduit::cli::dispatch(cli)
 }
