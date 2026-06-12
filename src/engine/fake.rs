@@ -5,12 +5,14 @@
 use crate::engine::{Engine, EngineError, EngineOutcome, TaskSpec};
 
 /// Deterministic engine (spec §Fakes) — the default demo path.
+#[derive(Debug)]
 pub enum FakeMode {
     Complete,
     Fail,
     Hang { secs: u64 },
 }
 
+#[derive(Debug)]
 pub struct FakeEngine {
     pub mode: FakeMode,
 }

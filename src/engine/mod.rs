@@ -43,6 +43,12 @@ pub trait Engine {
 /// Run the engine, measuring wall-clock around the call. The elapsed ms feed
 /// `TaskRecord::work_ms` and so the effort bucket (spec §The tuesday
 /// contract).
+///
+/// Returns ONE run's elapsed ms. `work_ms` is cumulative across attempts and
+/// revision rounds — the router must ADD (`work_ms += elapsed`), never
+/// assign. Precision note: a timed-out ClaudeCodeEngine run can overshoot
+/// its deadline by up to ~500ms (poll granularity) — fine for effort
+/// bucketing, not a tight bound.
 pub fn run_timed(
     engine: &dyn Engine,
     spec: &TaskSpec,
