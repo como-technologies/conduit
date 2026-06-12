@@ -141,6 +141,10 @@ impl GiteaForge {
                 ids.push(*id);
                 continue;
             }
+            eprintln!(
+                "conduit: auto-creating missing label {name:?} (neutral grey) — \
+                 add it to ensure_labels if this is a standing label"
+            );
             match self.call(
                 "POST",
                 "labels",
@@ -378,6 +382,11 @@ impl Forge for GiteaForge {
         Ok(None)
     }
 
+    /// Note: the comment-fallback leg is O(issues) x O(comments/issue). It
+    /// fires only when the marker is absent from every issue body (conduit
+    /// always embeds the marker at create time, so in practice: pre-existing
+    /// issues not created by conduit). Repos conduit manages are small
+    /// (dozens of issues), so the cost is acceptable for the spike.
     fn find_issue_by_marker(&self, marker: &str) -> Result<Option<IssueId>, ForgeError> {
         let all = self.list_all_issues()?;
         // Body scan first — create_issue embeds the marker there.
