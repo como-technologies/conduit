@@ -130,6 +130,11 @@ impl Store {
     }
 
     /// Load-modify-save: set `pending[index].done = true`. Atomic.
+    ///
+    /// Caller invariant (router): `index` must come from the SAME load that
+    /// produced the intents being executed — never from a previous tick's
+    /// record. The daemon is single-threaded, so load-modify-save is safe
+    /// within one tick.
     pub fn mark_intent_done(&self, task_id: &str, index: usize) -> Result<(), StoreError> {
         let mut rec = self.load_task(task_id)?.ok_or_else(|| StoreError::Io {
             path: self.task_path(task_id),
@@ -138,7 +143,15 @@ impl Store {
                 format!("task {task_id} not found"),
             ),
         })?;
-        rec.pending[index].done = true;
+        let len = rec.pending.len();
+        let intent = rec.pending.get_mut(index).ok_or_else(|| StoreError::Io {
+            path: self.task_path(task_id),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("pending intent index {index} out of range (len={len})"),
+            ),
+        })?;
+        intent.done = true;
         self.save_task(&rec)
     }
 
@@ -149,6 +162,7 @@ impl Store {
         let path = self.plan_path(task_id);
         let bytes = markdown.as_bytes();
         write_atomic(&path, bytes)?;
+        // sha2 0.11's digest output no longer implements LowerHex; map bytes.
         let digest = sha2::Sha256::digest(bytes);
         Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
     }
