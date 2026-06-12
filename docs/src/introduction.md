@@ -21,9 +21,11 @@ thin layer they don't have:
 2. a **PR/MR lifecycle state machine**, and
 3. the **forge adapter** — the net-new IP.
 
-conduit **drives GitHub and self-hosted Gitea identically today** — proven by a
-shared conformance suite and a byte-identical transcript diff; GitLab is the
-planned third implementation.
+conduit **drives GitHub, self-hosted Gitea, and GitLab identically today** —
+forge-neutrality proven at **N=3** by a shared conformance suite and a
+byte-identical three-way transcript diff. Gitea is the live lifecycle host;
+GitHub and GitLab mutations are dry-run by construction
+([forge contract](./dev/forge-contract.md), ADR-0012/ADR-0016).
 
 Status: spike complete. See the [demo walkthrough](./usage/demo.md) for
 evidence, and the [spike design](./dev/spike-design.md) for the historical

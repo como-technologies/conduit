@@ -19,10 +19,11 @@ block CI but must each be shown passing in their task.
   re-fires), CI transitions, merged-emits-only-`PrMerged`, fresh-cursor
   replays, deterministic event ordering; plus `rest_call` status
   classification (2xx/401/403/other) through an injected fake transport.
-- **`forge/gitea.rs`, `forge/github.rs`** — adapter wire tests against
-  fixture transports that panic on unexpected requests: snapshot filtering,
-  terminal-item visibility, pagination-until-short-page, label id-vs-name
-  quirks, CI status mapping.
+- **`forge/gitea.rs`, `forge/github.rs`, `forge/gitlab.rs`** — adapter wire
+  tests against fixture transports that panic on unexpected requests:
+  snapshot filtering, terminal-item visibility,
+  pagination-until-short-page, label id-vs-name(-vs-comma-string) quirks,
+  CI status mapping, GitLab's synthesized approval-review identity.
 - **`forge/dry_run.rs`** — reads delegate, mutations only reach the
   transcript, synthesized ids, the open-PR probe overlay.
 - **`engine/fake.rs`, `engine/claude_code.rs`** — deterministic artifact
@@ -62,7 +63,8 @@ One suite body (`run_conformance`) with a `Mutations` parameter:
 | Leg | When | What |
 |---|---|---|
 | `fake_forge_conforms` | always | full lifecycle, `Mutations::Real` |
-| `github_recorded_fixtures_conform` | always, no network | reads from `tests/fixtures/github/`, mutations → transcript; asserts all 13 normalized lines |
+| `github_recorded_fixtures_conform` | always, no network | reads from `tests/fixtures/github/`, mutations → transcript; asserts all 17 normalized lines |
+| `gitlab_authored_fixtures_conform` | always, no network | reads from `tests/fixtures/gitlab/` (authored from the documented REST v4 shapes — ADR-0016), mutations → transcript; the same 17-line assertions as the GitHub leg, plus the merged-MR/closed-issue disappearance check |
 | `gitea_live_conforms` | `CONDUIT_E2E_GITEA=1` after `just forge-up` | `Mutations::Real` against the throwaway container; seeds the PR head branch via the contents API first |
 | `github_live_reads_conform` | `CONDUIT_E2E_GITHUB=1` (+ `GITHUB_TOKEN` or `gh auth login`) | live reads of the public fixture repo; mutations still DryRun-only |
 
@@ -86,8 +88,10 @@ loudly, `run --once` surfaces the typed offline error, `init` on an
 unreachable forge fails but opens the store, `verify` refuses unknown and
 unmerged tasks with non-zero exits, `plan` bails on terminal tasks without
 invoking adroit, `plan` via a stub adroit creates a Scoped record (the
-`CONDUIT_ADROIT_BIN` seam), and the github demo-transcript leg emits
-deterministic normalized JSONL twice over.
+`CONDUIT_ADROIT_BIN` seam), the github demo-transcript leg emits
+deterministic normalized JSONL twice over, and the gitlab leg is asserted
+byte-identical to the github leg (both record-only — the hermetic two
+thirds of the N=3 proof; the live gitea third is the demo-kit beat).
 
 ### `tests/adroit_contract.rs` — the planner seam
 
@@ -130,3 +134,15 @@ The recorder (`src/forge/github.rs`) fetches each endpoint the snapshot path
 uses and writes the raw bodies into the fixture dir; commit the changed
 files. The fixture transport panics on any request without a recorded route,
 so adapter drift surfaces as a loud test failure, not silent staleness.
+
+## The GitLab fixtures are authored, not recorded
+
+`tests/fixtures/gitlab/` (`issues.json`, `merge_requests.json`,
+`approvals_<iid>.json`, `pipelines_<sha>.json`, `labels.json`) is authored
+from the **documented** REST v4 response shapes — no sanctioned GitLab host
+exists to record from: a local `gitlab-ce` container is far too heavy for
+the demo rig, and recording from gitlab.com would require a real project
+there (ADR-0016 records the trade and the upgrade path — a recorder
+mirroring `github::record_fixtures` plus an env-gated `CONDUIT_E2E_GITLAB=1`
+live leg, when an owner sanctions an instance). The fixture transport panics
+on unknown routes here too, so the same drift-detection property holds.

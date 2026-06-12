@@ -1,10 +1,10 @@
 # Forge contract
 
-The keystone (`src/forge/mod.rs`): one trait that GitHub and Gitea implement
-*identically*, proven by a parameterized conformance suite rather than
-promised. Adapters never produce events — they produce **snapshots**, and a
-single shared pure `diff` derives every event, so event semantics exist in
-exactly one place.
+The keystone (`src/forge/mod.rs`): one trait that GitHub, Gitea, and GitLab
+implement *identically* (N=3), proven by a parameterized conformance suite
+rather than promised. Adapters never produce events — they produce
+**snapshots**, and a single shared pure `diff` derives every event, so event
+semantics exist in exactly one place.
 
 ## The `Forge` trait
 
@@ -52,17 +52,28 @@ conformance suite:
   have been observed — a merged PR that vanishes loses its `PrMerged`
   forever and wedges the task.
 - **Explicit pagination.** `HttpResponse` carries no headers by design, so
-  Link-header pagination is unreachable; adapters loop
-  `?page=N&limit=50` (Gitea) / `?page=N&per_page=100` (GitHub) and stop on a
-  short page. A page-1-only fetch would silently truncate at the forge's
-  default page size and violate the disappearance rule.
+  Link-header (and GitLab `x-next-page`) pagination is unreachable; adapters
+  loop `?page=N&limit=50` (Gitea) / `?page=N&per_page=100` (GitHub, GitLab)
+  and stop on a short page. A page-1-only fetch would silently truncate at
+  the forge's default page size and violate the disappearance rule.
 - **Review stability.** Reviews are never filtered when the forge could make
   a filtered row reappear: Gitea keeps dismissed reviews with their original
   verdict and stable id. The narrow exception is a one-way in-place state
   mutation on the same id (GitHub's `DISMISSED`): a skipped id can never
   reappear with a submitted verdict, so skipping it cannot re-fire an event.
-  `PENDING` (draft) rows are skipped on both. A resubmission gets a new
-  forge-native id on both forges and correctly fires.
+  `PENDING` (draft) rows are skipped on both. GitLab is a **third shape —
+  dismissal-by-removal**: it has no review-submission objects at all, the
+  closest analog is MR approvals (`approved_by` rows of `{user,
+  approved_at}` with no forge-native id), and revoking an approval *removes*
+  the row. The adapter filters nothing and synthesizes the review id from
+  the documented `{user.id}@{approved_at}` pair: a standing approval is
+  stable across polls, a revocation fires nothing, and a re-approval mints a
+  fresh timestamp — a new id that correctly fires. Documented GitLab
+  limitation (ADR-0016): approvals map only to `Approved`; GitLab's "request
+  changes" is a mutable MR-level status with no per-event identity, so
+  `ChangesRequested`/`Commented` are not derivable from a GitLab snapshot —
+  acceptable while GitLab is record-only. A resubmission gets a new
+  forge-native (or synthesized) id on every forge and correctly fires.
 - **Id uniqueness.** Issue/PR ids must be unique per snapshot; duplicates in
   `prev` are last-wins, duplicates in `next` fire duplicate events.
 
@@ -137,10 +148,36 @@ the `pull_request` key); `merged` is `merged_at != null` —
 `merge_commit_sha` is populated with a test-merge sha even for unmerged PRs,
 so it is read only when merged.
 
-**The GitHub adapter is never handed out raw.** Its only public constructors
-(`open_github`, `fixture_forge`) return `DryRun(GitHubForge)`: reads
-delegate live (or to recorded fixtures), every mutation is recorded and never
-sent. Mutating github.com is unrepresentable in the spike.
+### GitLab (REST v4, `{base}/api/v4/projects/{owner}%2F{repo}/...`)
+
+| Method | Endpoint(s) |
+|---|---|
+| `fetch_snapshot` | `GET issues?state=all`, `GET merge_requests?state=all`, per MR `GET merge_requests/{iid}/approvals` + `GET pipelines?sha={sha}&per_page=1` |
+| `find_open_pr_by_head` | `GET merge_requests?state=opened&source_branch={branch}` (server-side filter, GitHub-like) |
+| `find_issue_by_marker` | `GET issues?state=all` + `description` scan, then a marker-note fallback per issue |
+| `ensure_labels` | `GET labels`, `POST labels` (`#`-prefixed color; 409 = already there) |
+| `create_issue` | `POST issues` (label **names**, ONE comma-separated string; missing labels auto-created) |
+| comments | notes API per noteable: `GET {kind}/{iid}/notes`, `PUT {kind}/{iid}/notes/{id}` / `POST {kind}/{iid}/notes` — issue and MR notes do NOT cross over |
+| `set_issue_labels` / `set_pr_labels` | `PUT issues/{iid}` / `PUT merge_requests/{iid}` (`labels` = absolute comma-separated replacement) |
+| `close_issue` | `PUT issues/{iid}` `{"state_event":"close"}` |
+| `open_pr` | `POST merge_requests` (labels ride the create — no second call) |
+
+GitLab quirks normalized away: the project path is URL-encoded into one
+segment; auth is the `PRIVATE-TOKEN` header; bodies are `description`;
+labels come back as plain strings; issues and MRs have **separate iid
+sequences** (label/comment endpoints never cross over); `merged` is the
+distinct `state == "merged"` (not closed — the inverse of Gitea/GitHub, and
+the shared diff handles both shapes); `merge_commit_sha` is documented "null
+until merged" (the inverse hazard of GitHub's test-merge sha) with
+`squash_commit_sha` / head `sha` as the merged-state fallbacks; CI is the
+latest pipeline for the head sha.
+
+**The GitHub and GitLab adapters are never handed out raw.** Their only
+public constructors (`open_github` / `open_gitlab`, plus each
+`fixture_forge`) return `DryRun(...)`: reads delegate live (or to fixtures),
+every mutation is recorded and never sent. Mutating github.com or a GitLab
+instance is unrepresentable (ADR-0012, ADR-0016). Gitea remains the one
+live-write lifecycle host, sanctioned only as the throwaway local container.
 
 ## DryRun normalization rules
 
@@ -166,6 +203,7 @@ round-trip works even though the PR never reached a real forge.
 
 `tests/conformance.rs` is one suite body (`run_conformance`) run against
 every implementation: FakeForge (always), GitHub recorded fixtures (always,
-no network), live Gitea (`CONDUIT_E2E_GITEA=1`), live GitHub reads
-(`CONDUIT_E2E_GITHUB=1`). "Identically" is a CI assertion, not a slogan —
-see [Testing](./testing.md).
+no network), GitLab authored fixtures (always, no network), live Gitea
+(`CONDUIT_E2E_GITEA=1`), live GitHub reads (`CONDUIT_E2E_GITHUB=1`).
+"Identically" is a CI assertion, not a slogan — see
+[Testing](./testing.md).

@@ -165,6 +165,12 @@ b119003e0d6d2809debd259f9f14871e53cb11b61170229a6775d4b75fbba865  t-gitea.jsonl
 b119003e0d6d2809debd259f9f14871e53cb11b61170229a6775d4b75fbba865  t-github.jsonl
 ```
 
+That capture is the iteration-2 run's N=2 record. Since the GitLab adapter
+landed (ADR-0016), the same beat diffs **three** ways — add
+`conduit demo-transcript 1 --forge gitlab > t-gitlab.jsonl` to the block
+above; the kit's beat 4 now runs the N=3 diff by default
+([customer demo](./customer-demo.md)).
+
 ## 6. The harvest rule, and forge down
 
 The merged PR's diff was the FakeEngine's deterministic artifact

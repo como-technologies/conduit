@@ -60,9 +60,11 @@ variants are for. Pre-warm note: `demo-up` loads the model into ollama's
 memory, so a live beat pays no cold start; run-2 of the full dogfood loop
 measured the same lanes at 355.9s (assess, zero retries) and ~5.2 min
 (import `--ai` + `plan --save`), consistent with rehearsal 2. (Clock
-footnote: the kit's WALL-CLOCK lines use the realtime clock; under WSL2 it
-drifted ~23s against the assessments binary's monotonic internal timer in
-rehearsal 2 — both numbers are preserved in the transcript.)
+footnote: rehearsal 2's WALL-CLOCK lines used the realtime clock, which
+WSL2 stepped ~23s against the assessments binary's monotonic internal
+timer — both numbers are preserved in that transcript. The kit now times
+beats on the monotonic clock (`/proc/uptime`), so the narration and the
+binaries' own elapsed marks can no longer disagree.)
 
 ## Beat 1 — Measure the prior period (pulse)
 
@@ -162,10 +164,14 @@ success — we machine-verify it.
 reviewer labels `conduit:run` → one tick to InReview → reviewer approves
 and merges through the API (in real life: the forge UI) → next tick
 observes Merged → `verify 5 -o json` → the forge-neutrality transcript
-diff. `--restart` inserts the crash sub-beat: `kill -9` mid-Coding,
-recover, audit the live forge for duplicates.
+diff, **three-way** since the GitLab adapter landed (ADR-0016): gitea
+executes live, github and gitlab are dry-run by construction. `--restart`
+inserts the crash sub-beat: `kill -9` mid-Coding, recover, audit the live
+forge for duplicates.
 
-**The audience sees** (rehearsal 1; restart evidence from rehearsal 2):
+**The audience sees** (rehearsal 1; restart evidence from rehearsal 2; the
+`FORGE-NEUTRAL` block re-captured from the N=3 beat — same sha as the
+rehearsal's two-way capture, now three ways):
 
 ```text
    plan for ADR-0005: stored plan (deterministic read from the ADR document)
@@ -183,9 +189,10 @@ recover, audit the live forge for duplicates.
          adr_label_present / branch_shape / never_adr_namespace
    overall: pass=true  pr=2  task=adr-0005
 
-   FORGE-NEUTRAL: identical (7 lines)
+   FORGE-NEUTRAL (N=3): identical (7 lines)
    9cf0b8d8...c7a6e  t-gitea.jsonl
    9cf0b8d8...c7a6e  t-github.jsonl
+   9cf0b8d8...c7a6e  t-gitlab.jsonl
 ```
 
 ```text

@@ -7,8 +7,9 @@ TAPS loop. Spike spec (normative): `docs/src/dev/spike-design.md`.
 
 - **Never push to a real remote. Never open a PR on any public forge.** The only
   push target that ever exists is the throwaway localhost Gitea container (and
-  local bare repos in tests). GitHub mutations are ALWAYS DryRun-decorated —
-  the constructor only hands out `DryRun(GitHubForge)`.
+  local bare repos in tests). GitHub and GitLab mutations are ALWAYS
+  DryRun-decorated — the constructors only hand out `DryRun(GitHubForge)` /
+  `DryRun(GitLabForge)` (ADR-0012 / ADR-0016).
 - **All work stays under `~/repos/como-tech/**`.** Tokens live in gitignored
   `.secrets/`; never commit or log them.
 - **Humans hold every gate.** No `Forge::merge` method exists; the `conduit:run`

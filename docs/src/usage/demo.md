@@ -245,23 +245,30 @@ The PR's labels on the forge, verbatim:
 ```sh
 conduit demo-transcript 2 --forge gitea  > /tmp/t-gitea.jsonl
 conduit demo-transcript 2 --forge github > /tmp/t-github.jsonl
-diff /tmp/t-gitea.jsonl /tmp/t-github.jsonl && echo "FORGE-NEUTRAL: identical"
+conduit demo-transcript 2 --forge gitlab > /tmp/t-gitlab.jsonl
+diff /tmp/t-gitea.jsonl /tmp/t-github.jsonl &&
+    diff /tmp/t-gitea.jsonl /tmp/t-gitlab.jsonl && echo "FORGE-NEUTRAL: identical"
 ```
 
-Both legs feed the same fixture event sequence through the real state
+All legs feed the same fixture event sequence through the real state
 machine. The gitea leg **executes** (live adapter, real git push against the
-throwaway forge); the github leg is `DryRun(GitHubForge)` — record-only by
-construction. Identical normalized output proves the action side; the read
-side is the conformance suite's job.
+throwaway forge); the github and gitlab legs are `DryRun(...)` — record-only
+by construction (ADR-0012, ADR-0016). Identical normalized output proves the
+action side; the read side is the conformance suite's job.
 
-Captured — the diff is empty:
+Captured at the spike close (N=2) — the diff is empty:
 
 ```text
 $ diff /tmp/t-gitea.jsonl /tmp/t-github.jsonl && echo "FORGE-NEUTRAL: identical"
 FORGE-NEUTRAL: identical
 ```
 
-The identical 7-line normalized stream (both legs, byte for byte —
+Re-proven at N=3 when the GitLab adapter landed: the demo kit's beat 4 runs
+the three-way diff by default and captured all three legs at one sha —
+`FORGE-NEUTRAL (N=3): identical (7 lines)`
+([customer demo](./customer-demo.md)).
+
+The identical 7-line normalized stream (every leg, byte for byte —
 `create_issue`, `open_pr`, `set_pr_labels`, link comment, effort recompute,
 close comment, `close_issue`; ids are first-seen placeholders, effort values
 redacted because they derive from wall-clock):
