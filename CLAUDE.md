@@ -39,6 +39,10 @@ just forge-up    # throwaway Gitea on localhost:3000 (demo/)
 just forge-down  # destroy it
 ```
 
+The customer demo kit (`demo/kit/demo-up`, per-beat scripts, `demo-down`)
+packages the full TAPS engagement demo — narrated script:
+`docs/src/usage/customer-demo.md`; design: ADR-0015.
+
 `adr-check` is standalone, not a `ci` leg: CI is a fresh checkout and the
 adroit pin lives in gitignored `.conduit/` — run it after `just init-adroit`
 (the demo does). The `adr/` corpus is authored ONLY with the pinned adroit

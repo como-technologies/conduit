@@ -6,6 +6,7 @@
 
 - [Demo walkthrough](./usage/demo.md)
 - [Playbook-corpus demo](./usage/playbook-demo.md)
+- [The customer demo (end to end)](./usage/customer-demo.md)
 
 # Development
 

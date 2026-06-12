@@ -27,4 +27,6 @@ planned third implementation.
 
 Status: spike complete. See the [demo walkthrough](./usage/demo.md) for
 evidence, and the [spike design](./dev/spike-design.md) for the historical
-normative architecture.
+normative architecture. The suite's end-to-end engagement demo — the full
+TAPS loop as a presenter-paced kit (`demo/kit/`) — is the
+[customer demo](./usage/customer-demo.md).
