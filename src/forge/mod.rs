@@ -43,8 +43,10 @@
 //! Note: `IssueSnapshot.closed` is carried for adapters/probes but is not read
 //! by `diff()` — no issue-closed event exists by design.
 
+pub mod dry_run;
 pub mod fake;
 pub mod gitea;
+pub mod github;
 
 use std::collections::HashMap;
 

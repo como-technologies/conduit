@@ -14,9 +14,21 @@ use time::OffsetDateTime;
 // Core conformance suite — forge-agnostic, asserts the public contract
 // ---------------------------------------------------------------------------
 
+/// How the leg's mutations behave — the documented honest-claim boundary
+/// (spec §Risks: dry-run proves the stream, not GitHub's acceptance).
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Mutations {
+    /// Mutations really execute on the forge; read-backs observe them.
+    Real,
+    /// Mutations only reach the DryRun transcript; read-back assertions that
+    /// need them visible on the forge are skipped. Every mutation is still
+    /// CALLED (asserting `Ok`), and snapshot normalization always runs.
+    DryRun,
+}
+
 /// Every adapter must satisfy this identically.
 /// `tag` disambiguates test data per leg/run (live forges keep state).
-fn run_conformance(forge: &dyn Forge, tag: &str) {
+fn run_conformance(forge: &dyn Forge, tag: &str, mutations: Mutations) {
     // 1. ensure_labels is idempotent (twice = same result, no error).
     let labels = vec![LabelSpec {
         name: format!("conformance:{tag}"),
@@ -40,11 +52,15 @@ fn run_conformance(forge: &dyn Forge, tag: &str) {
             labels: vec![format!("conformance:{tag}")],
         })
         .unwrap();
-    assert_eq!(
-        forge.find_issue_by_marker(&marker).unwrap(),
-        Some(issue),
-        "probe must find the created issue by its hidden marker"
-    );
+    if mutations == Mutations::Real {
+        // Read-back: a DryRun create never reaches the forge, so only Real
+        // legs can observe it through the probe.
+        assert_eq!(
+            forge.find_issue_by_marker(&marker).unwrap(),
+            Some(issue),
+            "probe must find the created issue by its hidden marker"
+        );
+    }
 
     // 3. comment upsert converges (marker pattern: second call edits, not dups).
     forge
@@ -102,7 +118,10 @@ fn run_conformance(forge: &dyn Forge, tag: &str) {
     };
     let pr_id = forge.open_pr(&draft).unwrap();
 
-    // 7b. find_open_pr_by_head must locate the opened PR by its exact head.
+    // 7b. find_open_pr_by_head must locate the opened PR by its exact head —
+    //     on a DryRun leg this resolves through the recorded-open-PRs overlay
+    //     (the replay probe must keep working even though the PR never
+    //     reached the real forge).
     assert_eq!(
         forge.find_open_pr_by_head(&pr_head).unwrap(),
         Some(pr_id),
@@ -143,12 +162,16 @@ fn run_conformance(forge: &dyn Forge, tag: &str) {
         )
         .unwrap();
 
-    // 7f. fetch_snapshot after PR open must show the PR with the correct head.
+    // 7f. fetch_snapshot after PR open must show the PR with the correct head
+    //     (Real legs only — snapshots delegate to live reads, which cannot
+    //     see a DryRun-recorded PR; the snapshot itself must still succeed).
     let snap2 = forge.fetch_snapshot().unwrap();
-    assert!(
-        snap2.prs.iter().any(|p| p.head_branch == pr_head),
-        "fetch_snapshot must include the opened PR (head: {pr_head})"
-    );
+    if mutations == Mutations::Real {
+        assert!(
+            snap2.prs.iter().any(|p| p.head_branch == pr_head),
+            "fetch_snapshot must include the opened PR (head: {pr_head})"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +295,7 @@ fn run_close_unknown_issue_is_404(forge: &conduit::forge::fake::FakeForge) {
 #[test]
 fn fake_forge_conforms() {
     let forge = FakeForge::new();
-    run_conformance(&forge, "fake");
+    run_conformance(&forge, "fake", Mutations::Real);
 
     // FakeForge-only deep assertions (stored-state convergence):
     use conduit::forge::fake::RecordedAction;
@@ -300,8 +323,93 @@ fn fake_forge_close_unknown_is_404() {
     run_close_unknown_issue_is_404(&forge);
 }
 
-// The GitHub leg is added by Task 9 (recorded fixtures always-on +
-// CONDUIT_E2E_GITHUB=1 live reads).
+/// Recorded-fixture GitHub leg — ALWAYS ON, no network. Reads come from
+/// tests/fixtures/github/ (recorded from the public fixture repo), mutations
+/// go to the DryRun transcript; the suite's read-side assertions run;
+/// mutation assertions check the transcript shape.
+#[test]
+fn github_recorded_fixtures_conform() {
+    let forge = conduit::forge::github::fixture_forge("tests/fixtures/github");
+    run_conformance(&forge, "gh-fixture", Mutations::DryRun);
+
+    // The DryRun transcript is the mutation-side evidence: every mutation
+    // the suite issued, normalized — ids -> first-seen placeholders, effort
+    // label values redacted, repo slug -> $REPO, no timestamps, one JSON
+    // object per line with the action key.
+    let t = forge.transcript();
+    assert_eq!(
+        t.len(),
+        13,
+        "all 13 suite mutations recorded (2 ensure_labels, create_issue, \
+         2 issue upserts, 2 set_issue_labels, close_issue, open_pr, \
+         2 PR upserts, 2 set_pr_labels): {t:#?}"
+    );
+    for line in &t {
+        let v: serde_json::Value = serde_json::from_str(line).expect("transcript line is JSON");
+        assert!(v.get("action").is_some(), "line names its action: {line}");
+        assert!(!line.contains("_at\""), "timestamps omitted: {line}");
+    }
+    assert!(t.iter().any(|l| l.contains("\"$ISSUE_1\"")));
+    assert!(t.iter().any(|l| l.contains("\"$PR_1\"")));
+    assert!(t.iter().any(|l| l.contains("effort:$REDACTED")));
+    assert!(
+        t.iter()
+            .all(|l| !l.contains("super-quick") && !l.contains("not-long")),
+        "effort label VALUES must never appear in a transcript"
+    );
+    assert!(
+        t.iter().all(|l| !l.contains(&format!(
+            "{}/{}",
+            conduit::forge::github::FIXTURE_OWNER,
+            conduit::forge::github::FIXTURE_REPO
+        ))),
+        "repo slug must be redacted to $REPO"
+    );
+}
+
+/// Live GitHub READS leg (CONDUIT_E2E_GITHUB=1): fetch_snapshot + probes
+/// against the real API; mutations still hit only the DryRun transcript.
+/// Read-side normalization assertions only — no lifecycle on a real repo.
+#[test]
+fn github_live_reads_conform() {
+    if std::env::var("CONDUIT_E2E_GITHUB").as_deref() != Ok("1") {
+        eprintln!("skip: set CONDUIT_E2E_GITHUB=1 (with GITHUB_TOKEN or `gh auth login`)");
+        return;
+    }
+    let token = conduit::forge::github::resolve_token().expect("GITHUB_TOKEN or gh login");
+    let cfg = conduit::config::GithubConfig {
+        owner: conduit::forge::github::FIXTURE_OWNER.into(),
+        repo: conduit::forge::github::FIXTURE_REPO.into(),
+    };
+    let forge = conduit::forge::github::open_github(&cfg, token);
+    let snap = forge.fetch_snapshot().unwrap();
+    for i in &snap.issues {
+        assert!(
+            i.labels
+                .iter()
+                .any(|l| l.starts_with("conduit:") || l.starts_with("adr:")),
+            "non-conduit issue leaked into live snapshot: {:?}",
+            i.id
+        );
+    }
+    for p in &snap.prs {
+        assert!(
+            p.head_branch.starts_with("conduit/"),
+            "non-conduit PR leaked into live snapshot: {:?}",
+            p.head_branch
+        );
+    }
+    assert_eq!(
+        forge.find_open_pr_by_head("conduit/never-exists").unwrap(),
+        None
+    );
+    assert_eq!(
+        forge
+            .find_issue_by_marker("<!-- conduit:task:never -->")
+            .unwrap(),
+        None
+    );
+}
 
 /// Live Gitea leg — needs `just forge-up` first. The tag is time-randomized
 /// so re-runs don't collide on the persistent container state.
@@ -334,7 +442,7 @@ fn gitea_live_conforms() {
         &format!("conduit/adr-0001/conformance-{tag}"),
         &tag,
     );
-    run_conformance(&forge, &tag);
+    run_conformance(&forge, &tag, Mutations::Real);
 }
 
 /// Create `branch` off main with one new file (Gitea contents API:
