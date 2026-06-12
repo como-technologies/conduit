@@ -1,8 +1,9 @@
 # The exact conduit config the playbook-corpus demo runs with.
 # demo/playbook-demo-init.sh copies this into the per-run workdir as
-# conduit.toml, substituting @ADROIT_DIR@ with the resolved absolute path of
-# the playbook ADR corpus (PLAYBOOK_DIR/src/adrs). Everything else is
-# explicit so the demo's effective config is fully documented here.
+# conduit.toml, resolving the placeholder on the [adroit] dir line to the
+# absolute path of the playbook ADR corpus (PLAYBOOK_DIR/src/adrs).
+# Everything else is explicit so the demo's effective config is fully
+# documented here.
 
 [forge]
 default = "gitea"

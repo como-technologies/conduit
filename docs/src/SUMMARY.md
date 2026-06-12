@@ -5,6 +5,7 @@
 # Usage
 
 - [Demo walkthrough](./usage/demo.md)
+- [Playbook-corpus demo](./usage/playbook-demo.md)
 
 # Development
 

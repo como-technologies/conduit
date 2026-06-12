@@ -14,11 +14,13 @@ conduit/
 ├── adroit.rev             the single adroit pin location (read by `just init-adroit`)
 ├── justfile               init / init-adroit / ci / adr-check / forge-up / forge-down / demo-trigger / conformance
 ├── CLAUDE.md              working agreements (no publishing, docs in mdbook, no client names)
-├── adr/                   conduit's OWN adroit corpus — the dogfood input (ADR-0001..0006, accepted)
+├── adr/                   conduit's OWN adroit corpus (ADR-0001..0013, accepted: 7 founding + 6 retirement)
 ├── docs/                  this mdbook
 ├── demo/docker-compose.yml  throwaway Gitea (localhost:3000, named volume, disposable)
-├── demo/gitea-init.sh     two-user bootstrap, labels, seeded repo
-├── demo/demo-trigger.sh   scripted human gate: reviewer labels the issue conduit:run
+├── demo/gitea-init.sh     two-user bootstrap, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize)
+├── demo/demo-trigger.sh   scripted human gate: reviewer labels the issue conduit:run (REPO_NAME)
+├── demo/playbook.conduit.toml   the documented config of the playbook-corpus demo
+├── demo/playbook-demo-init.sh   per-run unique demo workdir (conduit.toml + .secrets/bin links)
 ├── src/main.rs            thin binary: clap parse + dispatch (anyhow only here and in cli.rs)
 ├── src/cli.rs             init | plan <address> | run [--once] | status | verify <address> | demo-transcript <address>
 ├── src/config.rs          conduit.toml + env overlay (CONDUIT_FORGE/ENGINE/TIMEOUT_SECS/POLL_SECS)

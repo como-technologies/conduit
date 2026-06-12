@@ -21,9 +21,13 @@ just forge-up
 
 Starts the `conduit-gitea` container on `localhost:3000`, provisions two
 users (`conduit-bot` = the actor, `reviewer` = the human gate — Gitea blocks
-self-approval), mints tokens into gitignored `.secrets/`, creates org `como`
-and repo `conduit-dogfood` seeded from this repo, and pre-creates the
-`effort:*` / `conduit:*` labels.
+self-approval), mints tokens into gitignored `.secrets/` (pinned filenames),
+creates org `como` and a seeded repo, and pre-creates the `effort:*` /
+`conduit:*` labels. The seeding is parameterized — `SEED_REPO_DIR` picks the
+local repo whose `main` is pushed, `REPO_NAME` the forge repo — with
+defaults preserving this walkthrough (this repo, `conduit-dogfood`). The
+[playbook-corpus demo](./playbook-demo.md) uses the same script to seed the
+playbook instead, and runs from a per-run unique workdir.
 
 ```sh
 conduit init                  # .conduit store + the standing label set
@@ -36,7 +40,9 @@ ADROIT_DIR=adr .conduit/bin/adroit list --status accepted -o json
 ```
 
 Six accepted decisions — the corpus authored with the pinned adroit
-(captured, trimmed to the contract fields):
+(captured at spike acceptance, trimmed to the contract fields; the corpus
+has since grown to ADR-0013 with iteration 2's label-convergence and
+retirement decisions):
 
 ```json
 [

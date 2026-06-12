@@ -1,73 +1,65 @@
 # Post-spike follow-ups
 
-Seven residual items identified during the spike. None block the demo; all
-are worth doing before production use.
+Seven residual items were identified during the spike. As of iteration 2
+this list is **closed**: six are done, one is retired by an accepted ADR.
+Each entry below names the change of record. (The broader spec OUT-list is
+likewise closed — built, scheduled, or retired by ADR-0008..ADR-0013.)
 
-## 1. Move off token-in-URL (GIT\_ASKPASS / credential helper)
+## 1. Move off token-in-URL — DONE
 
-Credential redaction landed in `src/git.rs`: any `scheme://user:secret@host`
-occurrence in git argv or stderr is replaced with `scheme://$REDACTED@host`
-before it enters a `GitError::Command`. The URL itself, however, still appears
-in the process argument list (visible to `ps`, `/proc/<pid>/cmdline`, and any
-process-auditing daemon on the host). The right fix is to switch
-`GiteaForge::git_remote_url` to return a credential-free URL and supply the
-token via `GIT_ASKPASS` or a temporary per-invocation git credential helper —
-eliminating the secret from argv entirely. That change touches the `Forge`
-trait contract and the git subprocess harness, so it was deferred to keep the
-spike diff minimal.
+Done in `d0fdafd` (security(git)): `GiteaForge::git_remote_url` returns a
+credential-free URL across adapters; the token rides the child environment
+via an env-only one-shot credential helper, never argv. A regression test
+asserts no token substring appears in constructed git argv, and the
+token-in-URL push in `demo/gitea-init.sh` was fixed the same way. The
+spike-era redaction in `src/git.rs` is kept as defense-in-depth.
 
-## 2. Adroit plan timeout
+## 2. Adroit plan timeout — DONE
 
-`src/adroit.rs` carries a `TODO` comment marking where the `adroit plan`
-subprocess should inherit the engine's deadline mechanism (the same
-`timeout_secs` the engine uses). Without it, a slow or hung adroit invocation
-blocks the daemon indefinitely. The fix reuses the existing
-`EngineConfig::timeout_secs` field: pass it as a `--timeout` argument or
-wrap the subprocess in the same deadline wrapper the engine uses.
+Done in `1b44b27` (feat(adroit)): the `adroit plan` subprocess inherits the
+engine deadline (`[engine] timeout_secs`) via the same process-group-kill
+pattern the claude engine uses (run-1 learning: leader-kill is not enough).
+A hanging-fake-adroit test proves the call fails within the deadline; the
+old `TODO(timeout)` marker in `src/adroit.rs` is gone.
 
-## 3. Extract shared action-payload builders
+## 3. Extract shared action-payload builders — DONE
 
-`router.rs` and `transcript.rs` both construct forge action payloads
-independently. If either drifts — a field name changes, a new required key
-is added — the other silently produces the wrong payload and the tests may
-not catch it because they exercise only one path. The fix is to extract the
-builders into a shared module (e.g. `src/payload.rs`) and add a
-cross-assertion test that both call-sites produce identical output for the
-same inputs.
+Done in `d028a27` (refactor(payload)): `src/payload.rs` is the single source
+for forge action payloads, with a cross-assertion test
+(`tests/payload_parity.rs`) proving `router.rs` and `transcript.rs` emit
+byte-identical payloads for the same inputs.
 
-## 4. Namespace-scoped label convergence
+## 4. Namespace-scoped label convergence — DONE
 
-Labels applied by conduit currently share the flat forge namespace with human
-labels. The planned scheme — `effort:*/adr:*/conduit:*` prefixes — avoids
-collision and makes conduit labels machine-queryable, but it must preserve
-any human-applied labels that happen to share a prefix. The convergence
-semantics (add missing prefixed labels, remove stale prefixed labels, never
-touch unprefixed labels) are non-trivial enough to warrant an ADR before the
-first real-world use: the decision affects every forge adapter and the
-snapshot normalisation filter in `router.rs`.
+Decided in accepted ADR-0007
+(`adr/accepted/0007-namespace-scoped-label-convergence.md`, `c0251e2`) and
+implemented in `83bd2e3`
+(feat(labels)): conduit owns exactly the `effort:*` / `adr:*` / `conduit:*`
+prefixes; convergence adds missing and removes stale owned labels and never
+touches unprefixed human labels. The semantics live in one shared
+normalization layer (`src/labels.rs`), unit-tested there and proven on every
+adapter by the conformance suite.
 
-## 5. Mechanical enforcement of the ForgeCall trio obligation
+## 5. Mechanical enforcement of the ForgeCall trio obligation — DONE
 
-Every `ForgeCall` variant must be handled by exactly three things: the
-router, the transcript recorder, and the fake forge. At present this is
-enforced only by convention and code-review. A compile-time approach —
-a procedural macro or a sealed trait with exhaustive match arms in a
-dedicated test module — would make it impossible to add a new variant
-without also updating all three sites.
+Done in `ee5447c` (test(transcript)): adding a `ForgeCall` variant without
+router + transcript + FakeForge handling now fails mechanically
+(fail-closed), not by code-review convention.
 
-## 6. Sacrificial private GitHub repo for mutation acceptance
+## 6. Sacrificial private GitHub repo for mutation acceptance — RETIRED
 
-The spike's GitHub adapter always wraps mutations in `DryRun`. The spec
-names one residual gap: we have never actually sent a mutation payload to
-the GitHub API and verified it was accepted. A one-time validation against a
-throwaway private repo (create PR, set labels, close PR, delete branch) would
-close that gap and give confidence that the payload shapes match GitHub's
-current API before the `DryRun` wrapper is lifted for real use.
+Retired by accepted ADR-0012
+(`adr/accepted/0012-github-mutation-acceptance-held-owner-gated-behind-dryrun.md`)
+as an **owner-gated action**: validating that
+GitHub accepts conduit's mutation payloads requires mutating a real remote,
+and remote actions are owner-only under the standing mandate. `DryRun` stays
+the only GitHub mutation path until the owner personally runs the one-time
+validation; the residual gap is documented in the ADR rather than silently
+open.
 
-## 7. sha256\_hex dedup and README stub
+## 7. sha256_hex dedup and README stub — DONE
 
-`sha256_hex` is hand-rolled in at least three places in the codebase. The
-copies should be consolidated into a single `src/hash.rs` (or a small
-inline utility) and covered by one set of tests. Separately, the repo root
-has no `README.md` — a ten-line stub pointing at `CLAUDE.md`, the mdbook,
-and the demo page is sufficient to orient a new contributor.
+Both halves done: `d028a27` consolidated the three hand-rolled sha256-hex
+copies into the single `src/hash.rs` helper (grep-checkable), and the repo
+root has carried a `README.md` since `011ee11` — the earlier claim on this
+page that no README existed was stale and is hereby corrected.
