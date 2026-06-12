@@ -162,14 +162,36 @@ fn run_conformance(forge: &dyn Forge, tag: &str, mutations: Mutations) {
         )
         .unwrap();
 
-    // 7f. fetch_snapshot after PR open must show the PR with the correct head
-    //     (Real legs only — snapshots delegate to live reads, which cannot
-    //     see a DryRun-recorded PR; the snapshot itself must still succeed).
+    // 7f. fetch_snapshot after PR open must show the PR with the correct head,
+    //     title, and body (Real legs only — snapshots delegate to live reads,
+    //     which cannot see a DryRun-recorded PR; the snapshot itself must still
+    //     succeed). Asserting title + the trailer line of body here means a
+    //     field-name typo in either adapter (e.g. "Title" vs "title") fails
+    //     conformance rather than only the per-adapter fixture test.
+    //
+    //     Full CLI-level forge-backed verify (which also exercises these fields)
+    //     is covered in Task 14 of the demo transcript; the hermetic unit path
+    //     for violation detection lives in tuesday_checks tests (src/cli.rs).
     let snap2 = forge.fetch_snapshot().unwrap();
     if mutations == Mutations::Real {
+        let found = snap2.prs.iter().find(|p| p.head_branch == pr_head);
         assert!(
-            snap2.prs.iter().any(|p| p.head_branch == pr_head),
+            found.is_some(),
             "fetch_snapshot must include the opened PR (head: {pr_head})"
+        );
+        let found_pr = found.unwrap();
+        assert_eq!(
+            found_pr.title, draft.title,
+            "PrSnapshot.title must match the submitted PrDraft.title verbatim"
+        );
+        // The trailer is the final line of the submitted body; asserting it
+        // (rather than the full body string which forges may reformat) is
+        // sufficient to detect a field-name typo in the adapter's body parsing.
+        let expected_trailer = contract::body_trailer("ADR-0001");
+        let actual_last_line = found_pr.body.trim_end().lines().last().unwrap_or_default();
+        assert_eq!(
+            actual_last_line, expected_trailer,
+            "PrSnapshot.body final line must be the Adr-Reference trailer"
         );
     }
 }

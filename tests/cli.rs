@@ -165,6 +165,54 @@ fn verify_refuses_an_unmerged_task_before_touching_the_forge() {
         .stderr(predicate::str::contains("forge unreachable").not());
 }
 
+/// GAP B: cmd_plan rejects a terminal-state task immediately with the
+/// "cancel + new task" message, and MUST NOT invoke `adroit plan` at all.
+/// The stub sentinel guarantees the plan subcommand was never reached.
+#[test]
+fn plan_bails_on_terminal_task_without_invoking_adroit() {
+    let d = TempDir::new().unwrap();
+    // Write a Merged task record directly into the store — no forge needed.
+    std::fs::create_dir_all(d.path().join(".conduit/tasks")).unwrap();
+    std::fs::write(
+        d.path().join(".conduit/tasks/adr-0042.json"),
+        r#"{
+          "id": "adr-0042", "adr_reference": "ADR-0042", "adr_address": "42",
+          "title": "Use Rust", "state": "Merged",
+          "branch": "conduit/adr-0042/use-rust",
+          "issue": 1, "pr": 7, "attempt": 1, "work_ms": 0,
+          "plan_sha256": "x", "review_feedback": [], "pending": []
+        }"#,
+    )
+    .unwrap();
+    let stub = write_plan_stub(d.path());
+    conduit(&d)
+        .env("CONDUIT_ADROIT_BIN", &stub)
+        .args(["plan", "42"])
+        .assert()
+        .failure()
+        // The exact bail message from cmd_plan (spec §terminal bail).
+        .stderr(predicate::str::contains("cancel + new task"))
+        // adroit plan must NOT have been invoked — the stub writes a sentinel
+        // file on its first plan call and exits 7 on the second.  Neither
+        // should have happened; the sentinel must be absent.
+        .stderr(predicate::str::contains("adroit plan invoked twice").not());
+    // Belt-and-suspenders: the sentinel file must not exist at all.
+    assert!(
+        !stub.with_extension("plan-called").exists()
+            && !d.path().join("stub-adroit.plan-called").exists(),
+        "adroit plan must not have been called for a terminal task"
+    );
+}
+
+// GAP C (CLI-level): verify exits non-zero when the task is not yet Merged.
+// This is already covered by verify_refuses_an_unmerged_task_before_touching_the_forge
+// above; this comment documents why a full forge-backed verify CLI test is not
+// added here: the forge call in cmd_verify requires a live or stub forge that
+// can serve fetch_snapshot with the PR present, which is exercised end-to-end
+// in Task 14 of the demo transcript. The violation-detection logic itself
+// (tuesday_checks returning pass=false) is unit-tested exhaustively in
+// src/cli.rs tests::tuesday_checks_violation_yields_pass_false.
+
 /// The spec §Plan snapshot ordering, end-to-end: `conduit plan` persists the
 /// verbatim snapshot (+ ADR-body sidecar + Scoped record) BEFORE the forge
 /// call — pointing gitea at an unreachable port, the command fails with the

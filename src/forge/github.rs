@@ -743,10 +743,13 @@ mod tests {
                 r#"[
                     {"number": 7, "state": "open", "merged_at": null,
                      "merge_commit_sha": "feedface",
+                     "title": "[ADR-0003] adopt snapshot router",
+                     "body": "Implements the decision.\n\nAdr-Reference: ADR-0003",
                      "head": {"ref": "conduit/adr-0003/x", "sha": "abc"},
                      "labels": [{"name": "adr:ADR-0003"}]},
                     {"number": 8, "state": "open", "merged_at": null,
                      "merge_commit_sha": null,
+                     "title": "unrelated", "body": "",
                      "head": {"ref": "feature/other", "sha": "def"},
                      "labels": []}
                 ]"#
@@ -781,6 +784,16 @@ mod tests {
         assert_eq!(snap.issues[0].id, IssueId(1));
         assert_eq!(snap.prs.len(), 1, "non-conduit/* PR filtered");
         let pr = &snap.prs[0];
+        // GAP A: title and body must be parsed verbatim — a field-name typo in
+        // the adapter (e.g. "Title" vs "title") fails here before conformance.
+        assert_eq!(
+            pr.title, "[ADR-0003] adopt snapshot router",
+            "PrSnapshot.title must carry the forge title verbatim"
+        );
+        assert_eq!(
+            pr.body, "Implements the decision.\n\nAdr-Reference: ADR-0003",
+            "PrSnapshot.body must carry the forge body verbatim"
+        );
         assert!(!pr.merged, "merged_at null means unmerged");
         assert_eq!(
             pr.merge_sha, None,

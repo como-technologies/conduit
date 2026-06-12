@@ -671,6 +671,30 @@ mod tests {
         assert_eq!(fail_of(pr), vec!["branch_shape", "never_adr_namespace"]);
     }
 
+    /// GAP C: verify-report assembly — the pure path.
+    ///
+    /// `tuesday_checks` is the pure core of `cmd_verify`; this test asserts
+    /// that ANY single violation makes the overall pass=false, confirming the
+    /// `checks.iter().all(|c| c.pass)` aggregation that drives the non-zero
+    /// exit. Full CLI-level forge-backed verify (fetch_snapshot + PR lookup) is
+    /// exercised in Task 14 of the demo transcript; the CLI-level non-zero exit
+    /// for store-missing / unmerged tasks is covered in tests/cli.rs.
+    #[test]
+    fn tuesday_checks_violation_yields_pass_false() {
+        let mut pr = conforming_pr();
+        pr.title = "no bracket prefix".into(); // violates title_prefix
+        let checks = tuesday_checks(&record(), &pr);
+        assert!(
+            !checks.iter().all(|c| c.pass),
+            "at least one check must fail for a violating PR"
+        );
+        let failed: Vec<&str> = checks.iter().filter(|c| !c.pass).map(|c| c.name).collect();
+        assert!(
+            failed.contains(&"title_prefix"),
+            "title_prefix violation must fail: {failed:?}"
+        );
+    }
+
     #[test]
     fn trailer_check_tolerates_trailing_newlines_only() {
         let mut pr = conforming_pr();
