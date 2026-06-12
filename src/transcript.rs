@@ -310,7 +310,7 @@ pub fn run(
     git: Option<&GitContext>,
 ) -> anyhow::Result<Vec<String>> {
     let plan = fixture_plan(reference);
-    let plan_sha = sha256_hex(plan.as_bytes());
+    let plan_sha = crate::hash::sha256_hex(plan.as_bytes());
     let mut record = TaskRecord::new(reference, address, FIXTURE_TITLE, &plan_sha);
     // Distinct identity from any real planned task for the same ADR: marker
     // and workspace must never collide with the genuine lifecycle's.
@@ -322,14 +322,14 @@ pub fn run(
         lines: Vec::new(),
     };
 
-    // The `conduit plan` beat: issue with the plan body + hidden task marker
-    // (mirrors Router::ensure_issue's body/label construction).
-    let marker = contract::task_marker(&record.id);
-    let issue = emitter.create_issue(&NewIssue {
-        title: contract::pr_title(reference, FIXTURE_TITLE),
-        body: format!("{}\n\n{marker}", plan.trim_end()),
-        labels: vec![contract::adr_label(reference)],
-    })?;
+    // The `conduit plan` beat: the SAME payload builder Router::ensure_issue
+    // uses (src/payload.rs — single source, cross-asserted).
+    let issue = emitter.create_issue(&crate::payload::plan_issue(
+        reference,
+        FIXTURE_TITLE,
+        &plan,
+        &record.id,
+    ))?;
     record.issue = Some(issue);
 
     for event in fixture_events(reference) {
@@ -447,49 +447,48 @@ fn execute(
             if record.pr.is_none() && git.is_some() {
                 record.pr = emitter.forge.find_open_pr_by_head(&record.branch)?;
             }
-            let effort = contract::effort_bucket(record.work_ms, &config.effort);
-            let draft = PrDraft {
-                title: contract::pr_title(&record.adr_reference, &record.title),
-                body: contract::pr_body(&record.adr_reference, plan.trim_end()),
-                head: record.branch.clone(),
-                base: git
-                    .map(|g| g.base_branch.clone())
+            let draft = crate::payload::pr_draft(
+                &record.adr_reference,
+                &record.title,
+                plan,
+                &record.branch,
+                &git.map(|g| g.base_branch.clone())
                     .unwrap_or_else(|| "main".to_string()),
-                labels: vec![
-                    contract::adr_label(&record.adr_reference),
-                    effort.label().to_string(),
-                ],
-            };
+                record.work_ms,
+                &config.effort,
+            );
             record.pr = Some(emitter.open_pr(&draft, record.pr)?);
             Ok(())
         }
         Action::ApplyPrLabels => {
             let pr = pr_id(record)?;
-            let effort = contract::effort_bucket(record.work_ms, &config.effort);
             emitter.set_pr_labels(
                 pr,
-                &[
-                    effort.label().to_string(),
-                    contract::adr_label(&record.adr_reference),
-                ],
+                &crate::payload::pr_label_set(
+                    &record.adr_reference,
+                    record.work_ms,
+                    &config.effort,
+                ),
             )
         }
         Action::LinkComment => {
             let issue = issue_id(record)?;
             let pr = pr_id(record)?;
             let pr_display = emitter.redactor.pr(pr); // registered at open_pr
-            let body = format!(
-                "Opened PR {pr_display} for {}: {}.\n\n{marker}",
-                record.adr_reference, record.title
+            // The placeholder rides the shared builder — the ONE documented
+            // divergence from the router's raw PR number (payload.rs).
+            let body = crate::payload::link_comment(
+                &record.adr_reference,
+                &record.title,
+                &pr_display,
+                &record.id,
             );
             emitter.upsert_issue_comment(issue, &marker, &body)
         }
         Action::FailureComment { reason, log_tail } => {
             let issue = issue_id(record)?;
-            let body = format!(
-                "Engine failed (attempt {}): {reason}\n\n```\n{log_tail}\n```\n\n{marker}",
-                record.attempt
-            );
+            let body =
+                crate::payload::failure_comment(record.attempt, reason, log_tail, &record.id);
             emitter.upsert_issue_comment(issue, &marker, &body)
         }
         Action::SetIssueLabels { labels } => emitter.set_issue_labels(issue_id(record)?, labels),
@@ -520,14 +519,6 @@ fn pr_id(record: &TaskRecord) -> anyhow::Result<PrId> {
     record
         .pr
         .ok_or_else(|| anyhow::anyhow!("transcript task {} has no PR", record.id))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    use sha2::Digest;
-    sha2::Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 /// Delegates each mutation to the adapter AND appends its normalized line —

@@ -159,13 +159,10 @@ impl Store {
     // Plan snapshots — written verbatim, fsynced; returns the sha256 hex.
 
     pub fn save_plan(&self, task_id: &str, markdown: &str) -> Result<String, StoreError> {
-        use sha2::Digest;
         let path = self.plan_path(task_id);
         let bytes = markdown.as_bytes();
         write_atomic(&path, bytes)?;
-        // sha2 0.11's digest output no longer implements LowerHex; map bytes.
-        let digest = sha2::Sha256::digest(bytes);
-        Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+        Ok(crate::hash::sha256_hex(bytes))
     }
 
     pub fn load_plan(&self, task_id: &str) -> Result<String, StoreError> {
@@ -367,13 +364,8 @@ mod tests {
         let md = "# Plan\n\nstep one\n"; // exact bytes, incl. trailing newline
         let sha = s.save_plan("adr-0003", md).unwrap();
         assert_eq!(s.load_plan("adr-0003").unwrap(), md);
-        // sha256 of the exact bytes
-        use sha2::Digest;
-        let want: String = sha2::Sha256::digest(md.as_bytes())
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
-        assert_eq!(sha, want);
+        // sha256 of the exact bytes (helper verified against FIPS vectors).
+        assert_eq!(sha, crate::hash::sha256_hex(md.as_bytes()));
     }
 
     #[test]

@@ -13,7 +13,7 @@
 //! ever persist as crash states.
 
 use crate::engine::{EngineOutcome, TaskSpec};
-use crate::forge::{ForgeEvent, NewIssue, PrDraft, RepoSnapshot};
+use crate::forge::{ForgeEvent, RepoSnapshot};
 use crate::machine::{self, Action, Event, FeedbackOp, Transition};
 use crate::task::{ActionIntent, EngineResult, IssueId, PrId, TaskRecord, TaskState};
 use anyhow::Context as _;
@@ -136,11 +136,12 @@ impl Router<'_> {
             Some(id) => id,
             None => {
                 let plan = self.store.load_plan(&record.id)?;
-                self.forge.create_issue(&NewIssue {
-                    title: crate::contract::pr_title(&record.adr_reference, &record.title),
-                    body: format!("{}\n\n{marker}", plan.trim_end()),
-                    labels: vec![crate::contract::adr_label(&record.adr_reference)],
-                })?
+                self.forge.create_issue(&crate::payload::plan_issue(
+                    &record.adr_reference,
+                    &record.title,
+                    &plan,
+                    &record.id,
+                ))?
             }
         };
         record.issue = Some(id);
@@ -350,16 +351,16 @@ impl Router<'_> {
             }
             Action::ApplyPrLabels => {
                 let pr = pr_id(record)?;
-                let effort = crate::contract::effort_bucket(record.work_ms, &self.config.effort);
                 // Exactly one effort label, structurally: the set is absolute,
                 // so the other four are absent by construction (spec §The
                 // tuesday contract).
                 self.forge.set_pr_labels(
                     &pr,
-                    &[
-                        effort.label().to_string(),
-                        crate::contract::adr_label(&record.adr_reference),
-                    ],
+                    &crate::payload::pr_label_set(
+                        &record.adr_reference,
+                        record.work_ms,
+                        &self.config.effort,
+                    ),
                 )?;
                 Ok(None)
             }
@@ -367,9 +368,13 @@ impl Router<'_> {
                 let issue = issue_id(record)?;
                 let pr = pr_id(record)?;
                 let marker = crate::contract::task_marker(&record.id);
-                let body = format!(
-                    "Opened PR {} for {}: {}.\n\n{marker}",
-                    pr.0, record.adr_reference, record.title
+                // The router names the PR by its raw forge number; the
+                // transcript leg passes a placeholder — payload.rs module doc.
+                let body = crate::payload::link_comment(
+                    &record.adr_reference,
+                    &record.title,
+                    &pr.0.to_string(),
+                    &record.id,
                 );
                 self.forge.upsert_issue_comment(&issue, &marker, &body)?;
                 Ok(None)
@@ -377,10 +382,8 @@ impl Router<'_> {
             Action::FailureComment { reason, log_tail } => {
                 let issue = issue_id(record)?;
                 let marker = crate::contract::task_marker(&record.id);
-                let body = format!(
-                    "Engine failed (attempt {}): {reason}\n\n```\n{log_tail}\n```\n\n{marker}",
-                    record.attempt
-                );
+                let body =
+                    crate::payload::failure_comment(record.attempt, reason, log_tail, &record.id);
                 self.forge.upsert_issue_comment(&issue, &marker, &body)?;
                 Ok(None)
             }
@@ -493,18 +496,15 @@ impl Router<'_> {
             return Ok(());
         }
         let plan = self.store.load_plan(&record.id)?;
-        let effort = crate::contract::effort_bucket(record.work_ms, &self.config.effort);
-        let draft = PrDraft {
-            title: crate::contract::pr_title(&record.adr_reference, &record.title),
-            // Plan-derived summary; the trailer is the final line.
-            body: crate::contract::pr_body(&record.adr_reference, plan.trim_end()),
-            head: record.branch.clone(),
-            base: self.base_branch.clone(),
-            labels: vec![
-                crate::contract::adr_label(&record.adr_reference),
-                effort.label().to_string(),
-            ],
-        };
+        let draft = crate::payload::pr_draft(
+            &record.adr_reference,
+            &record.title,
+            &plan,
+            &record.branch,
+            &self.base_branch,
+            record.work_ms,
+            &self.config.effort,
+        );
         record.pr = Some(self.forge.open_pr(&draft)?);
         Ok(())
     }

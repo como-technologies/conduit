@@ -72,11 +72,7 @@ impl Engine for FakeEngine {
 /// failure is an engine-side failure (first-class `Failed`), not an
 /// `EngineError` — the seam reserves errors for "could not run at all".
 fn complete(spec: &TaskSpec) -> Result<EngineOutcome, EngineError> {
-    use sha2::Digest;
-    let plan_sha: String = sha2::Sha256::digest(spec.plan_markdown.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let plan_sha = crate::hash::sha256_hex(spec.plan_markdown.as_bytes());
     let rel = format!(
         "docs/impl/{}.md",
         crate::contract::task_slug(&spec.adr_reference)
@@ -126,13 +122,7 @@ mod tests {
         assert!(matches!(out, EngineOutcome::Completed { .. }));
         let doc = std::fs::read_to_string(ws.path().join("docs/impl/adr-0003.md")).unwrap();
         assert!(doc.contains("Adopt snapshot-diff router"));
-        // sha2 0.11's digest output no longer implements LowerHex (store.rs
-        // precedent) — the plan's `{:x}` adapted to the byte-map form.
-        use sha2::{Digest, Sha256};
-        let plan_sha: String = Sha256::digest("# Plan\n1. do it\n".as_bytes())
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let plan_sha = crate::hash::sha256_hex("# Plan\n1. do it\n".as_bytes());
         assert!(doc.contains(&plan_sha), "doc embeds the plan snapshot hash");
         // determinism: run again in a fresh ws, same bytes
         let ws2 = TempDir::new().unwrap();
