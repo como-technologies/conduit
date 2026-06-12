@@ -295,18 +295,20 @@ impl Forge for GiteaForge {
         format!("gitea {}/{} at {}", self.owner, self.repo, self.base_url)
     }
 
+    /// Credential-free (follow-up 1): the token never enters a git argv — it
+    /// reaches git through [`GiteaForge::git_auth`] + the env-only helper.
     fn git_remote_url(&self) -> Result<String, ForgeError> {
-        let (scheme, host) = self
-            .base_url
-            .split_once("://")
-            .ok_or_else(|| ForgeError::Api {
-                status: 0,
-                message: format!("gitea base_url has no scheme: {}", self.base_url),
-            })?;
         Ok(format!(
-            "{scheme}://conduit-bot:{}@{host}/{}/{}.git",
-            self.token, self.owner, self.repo
+            "{}/{}/{}.git",
+            self.base_url, self.owner, self.repo
         ))
+    }
+
+    fn git_auth(&self) -> Result<Option<crate::git::GitAuth>, ForgeError> {
+        Ok(Some(crate::git::GitAuth {
+            username: "conduit-bot".to_string(),
+            token: self.token.clone(),
+        }))
     }
 
     fn fetch_snapshot(&self) -> Result<RepoSnapshot, ForgeError> {
@@ -984,12 +986,26 @@ mod tests {
         assert_eq!(id, PrId(9));
     }
 
+    /// Follow-up 1: the remote URL carries NO credential — argv is
+    /// world-readable (`ps`, /proc/<pid>/cmdline); the token rides the git
+    /// child env via [`Forge::git_auth`] instead.
     #[test]
-    fn git_remote_url_embeds_bot_and_token() {
+    fn git_remote_url_is_credential_free() {
         let f = forge_with(vec![]);
-        assert_eq!(
-            f.git_remote_url().unwrap(),
-            "http://conduit-bot:tok@localhost:3000/como/conduit-dogfood.git"
+        let url = f.git_remote_url().unwrap();
+        assert_eq!(url, "http://localhost:3000/como/conduit-dogfood.git");
+        assert!(!url.contains("tok"), "token must not appear in the URL");
+        assert!(
+            crate::git::is_local_remote(&url),
+            "demo URL stays inside the local-push guard"
         );
+    }
+
+    #[test]
+    fn git_auth_supplies_the_bot_credential_for_the_git_layer() {
+        let f = forge_with(vec![]);
+        let auth = f.git_auth().unwrap().expect("gitea pushes need auth");
+        assert_eq!(auth.username, "conduit-bot");
+        assert_eq!(auth.token, "tok");
     }
 }

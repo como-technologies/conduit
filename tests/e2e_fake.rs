@@ -243,7 +243,7 @@ impl Rig {
     }
 
     fn remote_sha(&self) -> Option<String> {
-        conduit::git::ls_remote_sha(&self.remote_url, &self.record().branch).unwrap()
+        conduit::git::ls_remote_sha(&self.remote_url, &self.record().branch, None).unwrap()
     }
 
     /// Process restart: same store + same git remote, brand-new FakeForge

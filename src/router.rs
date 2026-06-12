@@ -422,12 +422,13 @@ impl Router<'_> {
             std::fs::remove_dir_all(&ws)?;
         }
         let remote = self.forge.git_remote_url()?;
+        let auth = self.forge.git_auth()?;
         let cache = self
             .store
             .root()
             .join("cache")
             .join(format!("{}.git", self.forge_name));
-        crate::git::ensure_cache(&cache, &remote)?;
+        crate::git::ensure_cache(&cache, &remote, auth.as_ref())?;
         crate::git::create_workspace(&cache, &ws, &self.base_branch, &record.branch, fresh)?;
         let plan = self.store.load_plan(&record.id)?;
         let spec = TaskSpec {
@@ -477,9 +478,12 @@ impl Router<'_> {
         // the probe below decides whether HEAD still needs pushing.
         crate::git::commit_all_except_task_file(&ws, &message)?;
         let remote = self.forge.git_remote_url()?;
+        let auth = self.forge.git_auth()?;
         let local = crate::git::head_sha(&ws)?;
-        if crate::git::ls_remote_sha(&remote, &record.branch)?.as_deref() != Some(local.as_str()) {
-            crate::git::push(&ws, &remote, &record.branch)?;
+        if crate::git::ls_remote_sha(&remote, &record.branch, auth.as_ref())?.as_deref()
+            != Some(local.as_str())
+        {
+            crate::git::push(&ws, &remote, &record.branch, auth.as_ref())?;
         }
         Ok(())
     }

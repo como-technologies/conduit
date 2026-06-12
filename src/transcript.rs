@@ -283,7 +283,10 @@ pub fn fixture_events(reference: &str) -> Vec<Event> {
 /// `None` — github is a transcript-only demo by construction: no clone, no
 /// push, no live probe.
 pub struct GitContext {
+    /// Credential-free (follow-up 1) — auth rides `auth`, never the URL.
     pub remote_url: String,
+    /// Forge credential for fetch/ls-remote/push (env-only helper; git.rs).
+    pub auth: Option<crate::git::GitAuth>,
     pub cache_dir: PathBuf,
     /// Workspaces land at `<workspace_root>/<transcript-task-id>`.
     pub workspace_root: PathBuf,
@@ -386,7 +389,7 @@ fn execute(
             if ws.exists() {
                 std::fs::remove_dir_all(&ws)?;
             }
-            crate::git::ensure_cache(&g.cache_dir, &g.remote_url)?;
+            crate::git::ensure_cache(&g.cache_dir, &g.remote_url, g.auth.as_ref())?;
             crate::git::create_workspace(
                 &g.cache_dir,
                 &ws,
@@ -436,10 +439,10 @@ fn execute(
                 &[("GIT_AUTHOR_DATE", PINNED), ("GIT_COMMITTER_DATE", PINNED)],
             )?;
             let local = crate::git::head_sha(&ws)?;
-            if crate::git::ls_remote_sha(&g.remote_url, &record.branch)?.as_deref()
+            if crate::git::ls_remote_sha(&g.remote_url, &record.branch, g.auth.as_ref())?.as_deref()
                 != Some(local.as_str())
             {
-                crate::git::push(&ws, &g.remote_url, &record.branch)?;
+                crate::git::push(&ws, &g.remote_url, &record.branch, g.auth.as_ref())?;
             }
             Ok(())
         }
@@ -671,6 +674,7 @@ mod tests {
         live.set_remote_url(&remote);
         let git = GitContext {
             remote_url: remote.clone(),
+            auth: None,
             cache_dir: dir.path().join("cache.git"),
             workspace_root: dir.path().join("workspaces"),
             base_branch: "main".into(),
@@ -732,7 +736,7 @@ mod tests {
         );
         let branch = contract::branch_name("ADR-0003", FIXTURE_TITLE);
         assert!(
-            crate::git::ls_remote_sha(&remote, &branch)
+            crate::git::ls_remote_sha(&remote, &branch, None)
                 .unwrap()
                 .is_some(),
             "execute leg pushed the transcript branch"
@@ -752,6 +756,7 @@ mod tests {
         live.set_remote_url(&remote);
         let git = GitContext {
             remote_url: remote,
+            auth: None,
             cache_dir: dir.path().join("cache.git"),
             workspace_root: dir.path().join("workspaces"),
             base_branch: "main".into(),
@@ -813,6 +818,7 @@ mod tests {
         const READS: &[&str] = &[
             "describe",
             "git_remote_url",
+            "git_auth",
             "fetch_snapshot",
             "find_open_pr_by_head",
             "find_issue_by_marker",

@@ -99,8 +99,15 @@ api POST /orgs/como/repos \
   '{"name":"conduit-dogfood","private":false,"default_branch":"main"}' 201 409
 
 # 5. Seed by pushing THIS repo's main to the container — the one sanctioned
-#    push target (throwaway, localhost-only; -f is fine here).
-git push -f "http://conduit-bot:$TOK@localhost:3000/como/conduit-dogfood.git" main:main
+#    push target (throwaway, localhost-only; -f is fine here). The token rides
+#    the child ENV via a one-shot credential helper, never the URL: argv is
+#    world-readable (ps, /proc) — the same follow-up-1 rule src/git.rs enforces.
+#    Single quotes keep the $GIT_* references literal in argv; git's shell
+#    expands them from the environment.
+GIT_USERNAME=conduit-bot GIT_PASSWORD="$TOK" git \
+  -c credential.helper= \
+  -c 'credential.helper=!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
+  push -f http://localhost:3000/como/conduit-dogfood.git main:main
 
 # 6. The tuesday-contract labels (colors: bare hex, no '#').
 label() {

@@ -18,6 +18,16 @@ pub enum GitError {
     Io(#[from] std::io::Error),
 }
 
+/// Credentials for an authenticated remote (follow-up 1): supplied to git via
+/// a one-shot inline credential helper — the token rides the child ENV
+/// (`GIT_PASSWORD`), never argv, which is world-readable (`ps`,
+/// `/proc/<pid>/cmdline`, process-auditing daemons).
+#[derive(Debug, Clone)]
+pub struct GitAuth {
+    pub username: String,
+    pub token: String,
+}
+
 /// Commit identity — never the user's; set via env at commit time so no
 /// workspace config is required.
 const IDENTITY: [(&str, &str); 4] = [
@@ -75,22 +85,77 @@ fn run_git_ok<S: AsRef<std::ffi::OsStr>>(
     }
 }
 
+/// The `-c` config args + env pairs that make git authenticate WITHOUT a
+/// secret in argv (follow-up 1): the helper text contains the LITERAL string
+/// `$GIT_PASSWORD`; git's shell expands it from the constructed child env.
+/// The empty `credential.helper=` clears inherited helpers first so the
+/// supplied credential always wins; `GIT_TERMINAL_PROMPT=0` turns a bad
+/// credential into a loud failure instead of a prompt-hang (stdin is null).
+fn auth_plumbing(auth: Option<&GitAuth>) -> (Vec<String>, Vec<(String, String)>) {
+    let Some(auth) = auth else {
+        return (vec![], vec![]);
+    };
+    (
+        vec![
+            "-c".into(),
+            "credential.helper=".into(),
+            "-c".into(),
+            "credential.helper=!f() { echo \"username=$GIT_USERNAME\"; \
+             echo \"password=$GIT_PASSWORD\"; }; f"
+                .into(),
+        ],
+        vec![
+            ("GIT_USERNAME".into(), auth.username.clone()),
+            ("GIT_PASSWORD".into(), auth.token.clone()),
+            ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+        ],
+    )
+}
+
+/// Chokepoint for every git subprocess that touches a (possibly
+/// authenticated) remote: auth plumbing prepended, plus the STRUCTURAL
+/// argv-leak guarantee — an assert that no argv carries the token, so a
+/// regression can never even spawn (follow-up 1; the userinfo redaction in
+/// GitError stays as defense-in-depth).
+fn run_git_remote_ok<S: AsRef<std::ffi::OsStr>>(
+    dir: Option<&Path>,
+    auth: Option<&GitAuth>,
+    args: &[S],
+) -> Result<std::process::Output, GitError> {
+    let (auth_args, envs) = auth_plumbing(auth);
+    let mut full: Vec<std::ffi::OsString> = auth_args.into_iter().map(Into::into).collect();
+    full.extend(args.iter().map(|a| a.as_ref().to_os_string()));
+    if let Some(a) = auth {
+        assert!(
+            full.iter()
+                .all(|arg| !arg.to_string_lossy().contains(&a.token)),
+            "git argv must never carry the forge token (follow-up 1)"
+        );
+    }
+    let env_refs: Vec<(&str, &str)> = envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    run_git_ok(dir, &env_refs, &full)
+}
+
 /// Clone-or-fetch the bare cache at `.conduit/cache/<forge>.git`.
 /// Mirror semantics: fetch prunes so the cache tracks remote deletions.
-pub fn ensure_cache(cache: &Path, remote_url: &str) -> Result<(), GitError> {
+pub fn ensure_cache(
+    cache: &Path,
+    remote_url: &str,
+    auth: Option<&GitAuth>,
+) -> Result<(), GitError> {
     if cache.exists() {
-        run_git_ok(
+        run_git_remote_ok(
             Some(cache),
-            &[],
+            auth,
             &["fetch", "--prune", remote_url, "+refs/heads/*:refs/heads/*"],
         )?;
     } else {
         if let Some(parent) = cache.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        run_git_ok(
+        run_git_remote_ok(
             None,
-            &[],
+            auth,
             &[
                 "clone".as_ref(),
                 "--bare".as_ref(),
@@ -182,15 +247,21 @@ pub fn commit_all_except_task_file_with_env(
     Ok(true)
 }
 
-/// Push `branch` from `ws` to the authenticated URL. REFUSES any URL that is
-/// not localhost/127.0.0.1/a filesystem path — the structural never-push guard.
-pub fn push(ws: &Path, remote_url: &str, branch: &str) -> Result<(), GitError> {
+/// Push `branch` from `ws` to the credential-free URL (auth rides the env —
+/// see [`auth_plumbing`]). REFUSES any URL that is not
+/// localhost/127.0.0.1/a filesystem path — the structural never-push guard.
+pub fn push(
+    ws: &Path,
+    remote_url: &str,
+    branch: &str,
+    auth: Option<&GitAuth>,
+) -> Result<(), GitError> {
     if !is_local_remote(remote_url) {
         return Err(GitError::NonLocalPush(remote_url.to_string()));
     }
-    run_git_ok(
+    run_git_remote_ok(
         Some(ws),
-        &[],
+        auth,
         &["push", remote_url, &format!("HEAD:refs/heads/{branch}")],
     )?;
     Ok(())
@@ -204,10 +275,14 @@ pub fn head_sha(ws: &Path) -> Result<String, GitError> {
 }
 
 /// `git ls-remote <url> refs/heads/<branch>` -> Some(sha) — the push replay probe.
-pub fn ls_remote_sha(remote_url: &str, branch: &str) -> Result<Option<String>, GitError> {
-    let out = run_git_ok(
+pub fn ls_remote_sha(
+    remote_url: &str,
+    branch: &str,
+    auth: Option<&GitAuth>,
+) -> Result<Option<String>, GitError> {
+    let out = run_git_remote_ok(
         None,
-        &[],
+        auth,
         &["ls-remote", remote_url, &format!("refs/heads/{branch}")],
     )?;
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -378,6 +453,73 @@ mod tests {
         );
     }
 
+    // ── auth plumbing (follow-up 1) ───────────────────────────────────────
+
+    #[test]
+    fn auth_plumbing_keeps_the_token_out_of_argv() {
+        let auth = GitAuth {
+            username: "conduit-bot".into(),
+            token: "sekret-token-123".into(),
+        };
+        let (args, envs) = auth_plumbing(Some(&auth));
+        assert!(
+            args.iter().all(|a| !a.contains("sekret-token-123")),
+            "token leaked into argv: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a.contains("credential.helper=!")),
+            "inline helper configured: {args:?}"
+        );
+        // git expands $GIT_PASSWORD itself — from the constructed child env.
+        assert_eq!(
+            envs.iter()
+                .find(|(k, _)| k == "GIT_PASSWORD")
+                .map(|(_, v)| v.as_str()),
+            Some("sekret-token-123")
+        );
+        assert_eq!(
+            envs.iter()
+                .find(|(k, _)| k == "GIT_USERNAME")
+                .map(|(_, v)| v.as_str()),
+            Some("conduit-bot")
+        );
+        let (args, envs) = auth_plumbing(None);
+        assert!(args.is_empty() && envs.is_empty(), "no auth, no plumbing");
+    }
+
+    /// The argv-leak regression (done-criterion 3): run_git_remote_ok ASSERTS
+    /// no constructed argv carries the token before spawning, so the whole
+    /// remote lifecycle below would panic on any leak. Local path remotes
+    /// ignore the credential helper — the plumbing must be inert there.
+    #[test]
+    fn remote_ops_with_auth_never_put_the_token_in_argv() {
+        let (_d, url) = seeded_remote();
+        let root = TempDir::new().unwrap();
+        let auth = GitAuth {
+            username: "conduit-bot".into(),
+            token: "sekret-token-123".into(),
+        };
+        let cache = root.path().join("cache.git");
+        ensure_cache(&cache, &url, Some(&auth)).unwrap();
+        ensure_cache(&cache, &url, Some(&auth)).unwrap(); // fetch leg too
+        let ws = root.path().join("ws");
+        create_workspace(&cache, &ws, "main", "conduit/adr-0003/x", true).unwrap();
+        std::fs::write(ws.join("f.txt"), "x").unwrap();
+        commit_all_except_task_file(&ws, "msg").unwrap();
+        assert!(
+            ls_remote_sha(&url, "conduit/adr-0003/x", Some(&auth))
+                .unwrap()
+                .is_none()
+        );
+        push(&ws, &url, "conduit/adr-0003/x", Some(&auth)).unwrap();
+        assert_eq!(
+            ls_remote_sha(&url, "conduit/adr-0003/x", Some(&auth))
+                .unwrap()
+                .unwrap(),
+            head_sha(&ws).unwrap()
+        );
+    }
+
     // ── is_local_remote / push tests ──────────────────────────────────────
 
     #[test]
@@ -396,7 +538,12 @@ mod tests {
     #[test]
     fn push_refuses_non_local_remotes() {
         let d = TempDir::new().unwrap();
-        let err = push(d.path(), "https://github.com/owner/repo.git", "conduit/x/y");
+        let err = push(
+            d.path(),
+            "https://github.com/owner/repo.git",
+            "conduit/x/y",
+            None,
+        );
         assert!(matches!(err, Err(GitError::NonLocalPush(_))));
     }
 
@@ -405,8 +552,8 @@ mod tests {
         let (_d, url) = seeded_remote();
         let root = TempDir::new().unwrap();
         let cache = root.path().join("cache.git");
-        ensure_cache(&cache, &url).unwrap();
-        ensure_cache(&cache, &url).unwrap(); // idempotent: second call fetches
+        ensure_cache(&cache, &url, None).unwrap();
+        ensure_cache(&cache, &url, None).unwrap(); // idempotent: second call fetches
         let ws = root.path().join("ws");
         create_workspace(&cache, &ws, "main", "conduit/adr-0003/x", true).unwrap();
         // workspace origin is the CACHE path — no credentials, no real remote
@@ -444,11 +591,17 @@ mod tests {
         );
         assert!(show.contains("[ADR-0003] x"));
         // push to the local bare remote; ls-remote sees the branch (the probe)
-        assert!(ls_remote_sha(&url, "conduit/adr-0003/x").unwrap().is_none());
-        push(&ws, &url, "conduit/adr-0003/x").unwrap();
+        assert!(
+            ls_remote_sha(&url, "conduit/adr-0003/x", None)
+                .unwrap()
+                .is_none()
+        );
+        push(&ws, &url, "conduit/adr-0003/x", None).unwrap();
         // replay probe semantics: remote sha == local HEAD -> push skippable
         assert_eq!(
-            ls_remote_sha(&url, "conduit/adr-0003/x").unwrap().unwrap(),
+            ls_remote_sha(&url, "conduit/adr-0003/x", None)
+                .unwrap()
+                .unwrap(),
             head_sha(&ws).unwrap()
         );
     }
@@ -458,7 +611,7 @@ mod tests {
         let (_d, url) = seeded_remote();
         let root = TempDir::new().unwrap();
         let cache = root.path().join("cache.git");
-        ensure_cache(&cache, &url).unwrap();
+        ensure_cache(&cache, &url, None).unwrap();
         let ws = root.path().join("ws");
         create_workspace(&cache, &ws, "main", "conduit/adr-0003/x", true).unwrap();
         assert!(!commit_all_except_task_file(&ws, "msg").unwrap());
@@ -471,13 +624,13 @@ mod tests {
         let (_d, url) = seeded_remote();
         let root = TempDir::new().unwrap();
         let cache = root.path().join("cache.git");
-        ensure_cache(&cache, &url).unwrap();
+        ensure_cache(&cache, &url, None).unwrap();
         let ws1 = root.path().join("ws1");
         create_workspace(&cache, &ws1, "main", "conduit/adr-0003/x", true).unwrap();
         std::fs::write(ws1.join("round1.txt"), "r1\n").unwrap();
         assert!(commit_all_except_task_file(&ws1, "round 1").unwrap());
-        push(&ws1, &url, "conduit/adr-0003/x").unwrap();
-        ensure_cache(&cache, &url).unwrap();
+        push(&ws1, &url, "conduit/adr-0003/x", None).unwrap();
+        ensure_cache(&cache, &url, None).unwrap();
 
         let ws2 = root.path().join("ws2");
         create_workspace(&cache, &ws2, "main", "conduit/adr-0003/x", false).unwrap();

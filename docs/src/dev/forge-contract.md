@@ -12,7 +12,11 @@ exactly one place.
 pub trait Forge {
     fn describe(&self) -> String;
     /// Used ONLY by src/git.rs, never by engines (the sandbox is structural).
+    /// ALWAYS credential-free — no token ever rides a process argv.
     fn git_remote_url(&self) -> Result<String, ForgeError>;
+    /// Credentials for git against git_remote_url, supplied via the git
+    /// layer's env-only credential helper (None: local paths / never pushed).
+    fn git_auth(&self) -> Result<Option<GitAuth>, ForgeError> { Ok(None) }
     // events in: one read, normalized
     fn fetch_snapshot(&self) -> Result<RepoSnapshot, ForgeError>;
     // idempotency probes (reads)

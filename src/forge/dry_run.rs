@@ -100,6 +100,10 @@ impl<F: Forge> Forge for DryRunForge<F> {
         self.inner.git_remote_url()
     }
 
+    fn git_auth(&self) -> Result<Option<crate::git::GitAuth>, ForgeError> {
+        self.inner.git_auth()
+    }
+
     fn fetch_snapshot(&self) -> Result<RepoSnapshot, ForgeError> {
         self.inner.fetch_snapshot()
     }

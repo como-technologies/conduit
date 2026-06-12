@@ -469,6 +469,55 @@ fn gitea_live_conforms() {
     run_conformance(&forge, &tag, Mutations::Real);
 }
 
+/// Live Gitea PUSH leg (CONDUIT_E2E_GITEA=1, after `just forge-up`):
+/// follow-up 1 end-to-end — the credential-free remote URL plus env-only
+/// auth must really authenticate against the throwaway forge over HTTP for
+/// clone, fetch, push, and ls-remote. The argv-leak assert inside
+/// src/git.rs's remote chokepoint runs on every one of these calls.
+#[test]
+fn gitea_live_push_leg_authenticates_without_token_in_argv() {
+    if std::env::var("CONDUIT_E2E_GITEA").as_deref() != Ok("1") {
+        eprintln!("skip: set CONDUIT_E2E_GITEA=1 (and run `just forge-up`)");
+        return;
+    }
+    let token = std::fs::read_to_string(".secrets/conduit-bot.token")
+        .expect("run `just forge-up` first")
+        .trim()
+        .to_string();
+    let cfg = conduit::config::GiteaConfig::default();
+    let forge = conduit::forge::gitea::GiteaForge::open(&cfg, token.clone());
+
+    let url = forge.git_remote_url().unwrap();
+    assert!(
+        !url.contains(&token),
+        "remote URL must be credential-free (follow-up 1)"
+    );
+    let auth = forge.git_auth().unwrap();
+    assert!(auth.is_some(), "gitea supplies git auth for its pushes");
+
+    let tag = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let d = tempfile::TempDir::new().unwrap();
+    let cache = d.path().join("cache.git");
+    conduit::git::ensure_cache(&cache, &url, auth.as_ref()).unwrap();
+    conduit::git::ensure_cache(&cache, &url, auth.as_ref()).unwrap(); // fetch leg
+    let ws = d.path().join("ws");
+    let branch = format!("conduit/adr-0001/push-leg-{tag}");
+    conduit::git::create_workspace(&cache, &ws, "main", &branch, true).unwrap();
+    std::fs::write(ws.join(format!("push-leg-{tag}.txt")), "push leg\n").unwrap();
+    assert!(conduit::git::commit_all_except_task_file(&ws, "test: live push leg probe").unwrap());
+    conduit::git::push(&ws, &url, &branch, auth.as_ref()).unwrap();
+    assert_eq!(
+        conduit::git::ls_remote_sha(&url, &branch, auth.as_ref())
+            .unwrap()
+            .unwrap(),
+        conduit::git::head_sha(&ws).unwrap(),
+        "pushed sha visible through the authenticated probe"
+    );
+}
+
 /// Create `branch` off main with one new file (Gitea contents API:
 /// `new_branch` creates the branch as part of the commit).
 fn seed_branch(cfg: &conduit::config::GiteaConfig, token: &str, branch: &str, tag: &str) {

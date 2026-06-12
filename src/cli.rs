@@ -524,6 +524,7 @@ fn cmd_demo_transcript(dir: &Path, config: &Config, address: &str) -> anyhow::Re
             let store = Store::open(dir.join(".conduit"))?;
             let git = crate::transcript::GitContext {
                 remote_url: forge.git_remote_url()?,
+                auth: forge.git_auth()?,
                 cache_dir: store.root().join("cache").join("gitea.git"),
                 workspace_root: store.root().join("workspaces"),
                 base_branch: "main".to_string(),

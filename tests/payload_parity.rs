@@ -163,6 +163,7 @@ fn transcript_leg(dir: &TempDir) -> Vec<RecordedAction> {
     forge.set_remote_url(&remote);
     let git = GitContext {
         remote_url: remote,
+        auth: None,
         cache_dir: dir.path().join("cache.git"),
         workspace_root: dir.path().join("workspaces"),
         base_branch: "main".into(),

@@ -170,7 +170,15 @@ pub struct PrDraft {
 pub trait Forge {
     fn describe(&self) -> String;
     /// Used ONLY by src/git.rs, never by engines (spec: sandbox is structural).
+    /// ALWAYS credential-free (follow-up 1) — no token ever rides a process
+    /// argv; authentication goes through [`Forge::git_auth`].
     fn git_remote_url(&self) -> Result<String, ForgeError>;
+    /// Credentials for git operations against [`Forge::git_remote_url`],
+    /// supplied to the git layer's env-only credential helper. `None` = the
+    /// remote needs no auth (local paths; GitHub, which is never pushed).
+    fn git_auth(&self) -> Result<Option<crate::git::GitAuth>, ForgeError> {
+        Ok(None)
+    }
     // events in: one read, normalized
     fn fetch_snapshot(&self) -> Result<RepoSnapshot, ForgeError>;
     // idempotency probes (reads)
