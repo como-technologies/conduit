@@ -55,7 +55,6 @@ pub enum RecordedAction {
 // Internal state
 // ---------------------------------------------------------------------------
 
-#[derive(Default)]
 struct FakeState {
     /// Queued scripted fetch results: pop front. When one remains, keep
     /// returning it (stable tail). Empty + no last → derive from stored state.
@@ -99,11 +98,15 @@ impl FakeState {
         }
     }
 
-    /// Derive a normalized snapshot from stored in-memory state. Applies the
-    /// same normalization filter a real adapter uses:
+    /// Derive a normalized snapshot from stored in-memory state.
+    ///
+    /// This simulates the POST-filter state a correct adapter produces:
     /// - Issues: only those with at least one label starting with `"conduit:"`
-    ///   or `"adr:"`.
-    /// - PRs: only those whose `head` starts with `"conduit/"`.
+    ///   or `"adr:"`. Closed issues are included intentionally — the
+    ///   disappearance rule requires terminal items stay visible.
+    /// - PRs: only those whose `head` starts with `"conduit/"`. Closed and
+    ///   merged PRs are retained with `closed: true` per the disappearance
+    ///   rule; this is not a raw `?state=open` API filter.
     fn derive_snapshot(&self) -> RepoSnapshot {
         let issues: Vec<IssueSnapshot> = self
             .issues
@@ -124,8 +127,8 @@ impl FakeState {
         let prs: Vec<PrSnapshot> = self
             .prs
             .iter()
-            .filter(|(_, draft, open)| *open && draft.head.starts_with("conduit/"))
-            .map(|(id, draft, _)| PrSnapshot {
+            .filter(|(_, draft, _)| draft.head.starts_with("conduit/"))
+            .map(|(id, draft, open)| PrSnapshot {
                 id: *id,
                 head_branch: draft.head.clone(),
                 labels: draft.labels.clone(),
@@ -133,7 +136,7 @@ impl FakeState {
                 ci: super::CiState::None,
                 merged: false,
                 merge_sha: None,
-                closed: false,
+                closed: !open,
             })
             .collect();
 
@@ -390,5 +393,62 @@ impl Forge for FakeForge {
             labels: labels.to_vec(),
         });
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::forge::PrDraft;
+
+    /// derive_snapshot must keep closed/merged PRs with closed=true (the
+    /// disappearance rule: terminal items stay visible, not filtered out).
+    #[test]
+    fn derive_snapshot_retains_closed_and_merged_prs() {
+        let forge = FakeForge::new();
+
+        // Open a PR, then close it by setting open=false in stored state.
+        let draft = PrDraft {
+            head: "conduit/adr-0001/test".into(),
+            base: "main".into(),
+            title: "test PR".into(),
+            body: "body".into(),
+            labels: vec![],
+        };
+        let pr_id = forge.open_pr(&draft).unwrap();
+
+        // Mark it closed directly in state.
+        {
+            let mut s = forge.state.lock().expect("FakeForge lock");
+            if let Some(entry) = s.prs.iter_mut().find(|(id, _, _)| *id == pr_id) {
+                entry.2 = false; // open = false → closed
+            }
+        }
+
+        let snap = forge.fetch_snapshot().unwrap();
+        let pr = snap.prs.iter().find(|p| p.id == pr_id);
+        assert!(pr.is_some(), "closed PR must appear in derived snapshot");
+        assert!(pr.unwrap().closed, "closed PR must have closed=true");
+    }
+
+    /// An open PR must appear with closed=false in the derived snapshot.
+    #[test]
+    fn derive_snapshot_open_pr_has_closed_false() {
+        let forge = FakeForge::new();
+        let draft = PrDraft {
+            head: "conduit/adr-0002/test".into(),
+            base: "main".into(),
+            title: "open PR".into(),
+            body: "body".into(),
+            labels: vec![],
+        };
+        let pr_id = forge.open_pr(&draft).unwrap();
+        let snap = forge.fetch_snapshot().unwrap();
+        let pr = snap.prs.iter().find(|p| p.id == pr_id).unwrap();
+        assert!(!pr.closed, "open PR must have closed=false");
     }
 }

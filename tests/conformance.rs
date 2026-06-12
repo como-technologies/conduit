@@ -4,8 +4,9 @@
 //! wired here (Task 7); Tasks 8/9 add Gitea and GitHub legs without touching
 //! `run_conformance`.
 
+use conduit::contract;
 use conduit::forge::fake::FakeForge;
-use conduit::forge::{Forge, LabelSpec, NewIssue, RepoSnapshot};
+use conduit::forge::{Forge, LabelSpec, NewIssue, PrDraft, RepoSnapshot};
 use conduit::task::{IssueId, PrId};
 use time::OffsetDateTime;
 
@@ -83,11 +84,82 @@ fn run_conformance(forge: &dyn Forge, tag: &str) {
             p.head_branch
         );
     }
+
+    // 7. PR mutation round-trip.
+    //
+    // 7a. open_pr: the adapter returns a live PR id with the expected head.
+    let pr_head = format!("conduit/adr-0001/conformance-{tag}");
+    let pr_body_text = contract::pr_body("ADR-0001", "conformance PR body");
+    let draft = PrDraft {
+        head: pr_head.clone(),
+        base: "main".into(),
+        title: format!("[conformance {tag}] probe PR"),
+        body: pr_body_text,
+        labels: vec![
+            "effort:1-super-quick".to_string(),
+            "adr:ADR-0001".to_string(),
+        ],
+    };
+    let pr_id = forge.open_pr(&draft).unwrap();
+
+    // 7b. find_open_pr_by_head must locate the opened PR by its exact head.
+    assert_eq!(
+        forge.find_open_pr_by_head(&pr_head).unwrap(),
+        Some(pr_id),
+        "find_open_pr_by_head must return the opened PR id"
+    );
+
+    // 7c. find_open_pr_by_head on a non-existent head returns None.
+    assert_eq!(
+        forge.find_open_pr_by_head("conduit/none/missing").unwrap(),
+        None,
+        "find_open_pr_by_head must return None for an unknown head"
+    );
+
+    // 7d. upsert_pr_comment is idempotent on the same marker (no error on
+    //     the second call; stored state converges).
+    let pr_marker = format!("<!-- conduit:pr:conformance-{tag} -->");
+    forge
+        .upsert_pr_comment(&pr_id, &pr_marker, "pr status: first")
+        .unwrap();
+    forge
+        .upsert_pr_comment(&pr_id, &pr_marker, "pr status: second")
+        .unwrap();
+
+    // 7e. set_pr_labels converges: two calls with different label sets, no error.
+    forge
+        .set_pr_labels(
+            &pr_id,
+            &[
+                "effort:1-super-quick".to_string(),
+                "adr:ADR-0001".to_string(),
+            ],
+        )
+        .unwrap();
+    forge
+        .set_pr_labels(
+            &pr_id,
+            &["effort:2-not-long".to_string(), "adr:ADR-0001".to_string()],
+        )
+        .unwrap();
+
+    // 7f. fetch_snapshot after PR open must show the PR with the correct head.
+    let snap2 = forge.fetch_snapshot().unwrap();
+    assert!(
+        snap2.prs.iter().any(|p| p.head_branch == pr_head),
+        "fetch_snapshot must include the opened PR (head: {pr_head})"
+    );
 }
 
 // ---------------------------------------------------------------------------
-// Review-mandated additional conformance cases
-// (contract obligations in forge/mod.rs header not covered above)
+// FakeForge-typed helper legs
+//
+// These three functions assert adapter-contract behaviors that require
+// FakeForge's script() machinery or direct state inspection — they cannot be
+// expressed through the Forge trait alone. Tasks 8/9 must cover the equivalent
+// behaviors (disappearance rule, 404/None on unknown ids) through their own
+// fixture/live mechanisms; run_conformance above is the shared body to extend
+// for any new adapter-agnostic assertions.
 // ---------------------------------------------------------------------------
 
 /// (review-mandated) Disappearance rule: a merged/closed PR present in a
@@ -204,8 +276,10 @@ fn fake_forge_conforms() {
 
     // FakeForge-only deep assertions (stored-state convergence):
     use conduit::forge::fake::RecordedAction;
-    let upserts = forge.count(|a| matches!(a, RecordedAction::UpsertIssueComment { .. }));
-    assert_eq!(upserts, 2, "both upsert calls recorded");
+    let issue_upserts = forge.count(|a| matches!(a, RecordedAction::UpsertIssueComment { .. }));
+    assert_eq!(issue_upserts, 2, "both issue upsert calls recorded");
+    let pr_upserts = forge.count(|a| matches!(a, RecordedAction::UpsertPrComment { .. }));
+    assert_eq!(pr_upserts, 2, "both PR upsert calls recorded");
 }
 
 #[test]
