@@ -1,0 +1,21 @@
+{
+  "id": 8001,
+  "iid": 10,
+  "project_id": 7,
+  "title": "[ADR-0003] Adopt the snapshot router",
+  "state": "opened",
+  "approvals_required": 0,
+  "approvals_left": 0,
+  "approved_by": [
+    {
+      "user": {
+        "id": 4,
+        "username": "reviewer",
+        "name": "The Reviewer",
+        "state": "active",
+        "web_url": "https://gitlab.example.test/reviewer"
+      },
+      "approved_at": "2026-06-03T09:00:00.000Z"
+    }
+  ]
+}

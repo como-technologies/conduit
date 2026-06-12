@@ -1,0 +1,28 @@
+[
+  {
+    "id": 301,
+    "name": "conduit:run",
+    "color": "#1d76db",
+    "text_color": "#FFFFFF",
+    "description": "human trigger: start this task",
+    "open_issues_count": 1,
+    "closed_issues_count": 0,
+    "open_merge_requests_count": 0,
+    "subscribed": false,
+    "priority": null,
+    "is_project_label": true
+  },
+  {
+    "id": 302,
+    "name": "bug",
+    "color": "#d9534f",
+    "text_color": "#FFFFFF",
+    "description": "",
+    "open_issues_count": 1,
+    "closed_issues_count": 0,
+    "open_merge_requests_count": 0,
+    "subscribed": false,
+    "priority": null,
+    "is_project_label": true
+  }
+]

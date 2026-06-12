@@ -1,8 +1,8 @@
 //! Parameterized conformance suite — every Forge adapter must satisfy this
 //! contract identically. The suite body lives in `run_conformance`; each leg
-//! is a `#[test]` that wires one implementation. Only the FakeForge leg is
-//! wired here (Task 7); Tasks 8/9 add Gitea and GitHub legs without touching
-//! `run_conformance`.
+//! is a `#[test]` that wires one implementation: FakeForge (Task 7), Gitea
+//! and GitHub (Tasks 8/9), GitLab (the N=3 proof, ADR-0016) — none of them
+//! touching `run_conformance`.
 
 use conduit::contract;
 use conduit::forge::fake::FakeForge;
@@ -445,6 +445,76 @@ fn github_recorded_fixtures_conform() {
         ))),
         "repo slug must be redacted to $REPO"
     );
+}
+
+/// Authored-fixture GitLab leg — ALWAYS ON, no network (the N=3 proof).
+/// Reads come from tests/fixtures/gitlab/ (authored from the documented
+/// REST v4 shapes — no sanctioned GitLab host exists to record from;
+/// ADR-0016), mutations go to the DryRun transcript; the suite's read-side
+/// assertions run; mutation assertions check the transcript shape. The
+/// transcript assertions are byte-for-byte the GitHub leg's: the third
+/// adapter rides the SAME shared normalization (ADR-0007 convergence
+/// included), so it cannot drift.
+#[test]
+fn gitlab_authored_fixtures_conform() {
+    let forge = conduit::forge::gitlab::fixture_forge("tests/fixtures/gitlab");
+    run_conformance(&forge, "gl-fixture", Mutations::DryRun);
+
+    // The DryRun transcript is the mutation-side evidence — same 17-line
+    // shape as the GitHub leg, same normalization rules.
+    let t = forge.transcript();
+    assert_eq!(
+        t.len(),
+        17,
+        "all 17 suite mutations recorded (2 ensure_labels, create_issue, \
+         2 issue upserts, 2 set_issue_labels, 2 convergence set_issue_labels, \
+         close_issue, open_pr, 2 PR upserts, 2 set_pr_labels, \
+         2 convergence set_pr_labels): {t:#?}"
+    );
+    for line in &t {
+        let v: serde_json::Value = serde_json::from_str(line).expect("transcript line is JSON");
+        assert!(v.get("action").is_some(), "line names its action: {line}");
+        assert!(!line.contains("_at\""), "timestamps omitted: {line}");
+    }
+    assert!(t.iter().any(|l| l.contains("\"$ISSUE_1\"")));
+    assert!(t.iter().any(|l| l.contains("\"$PR_1\"")));
+    assert!(t.iter().any(|l| l.contains("effort:$REDACTED")));
+    assert!(
+        t.iter()
+            .all(|l| !l.contains("super-quick") && !l.contains("not-long")),
+        "effort label VALUES must never appear in a transcript"
+    );
+    assert!(
+        t.iter().all(|l| !l.contains(&format!(
+            "{}/{}",
+            conduit::forge::gitlab::FIXTURE_OWNER,
+            conduit::forge::gitlab::FIXTURE_REPO
+        ))),
+        "repo slug must be redacted to $REPO"
+    );
+
+    // Disappearance rule, fixture-leg equivalent of the FakeForge helper:
+    // the authored snapshot carries a merged MR (state "merged" — GitLab's
+    // distinct terminal state) and a closed issue; both must stay visible
+    // with their terminal data intact.
+    let snap = forge.fetch_snapshot().unwrap();
+    let merged = snap
+        .prs
+        .iter()
+        .find(|p| p.id == PrId(12))
+        .expect("merged MR stays in the snapshot");
+    assert!(merged.merged, "state=merged maps to merged");
+    assert_eq!(
+        merged.merge_sha.as_deref(),
+        Some("4dde5ff60718293a4b5c6d7e8f90a1b2c3d4e5f6"),
+        "merge_commit_sha read when merged"
+    );
+    let closed = snap
+        .issues
+        .iter()
+        .find(|i| i.id == IssueId(3))
+        .expect("closed issue stays in the snapshot");
+    assert!(closed.closed);
 }
 
 /// Live GitHub READS leg (CONDUIT_E2E_GITHUB=1): fetch_snapshot + probes

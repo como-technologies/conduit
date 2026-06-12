@@ -1,0 +1,45 @@
+[
+  {
+    "id": 9001,
+    "iid": 1,
+    "project_id": 7,
+    "title": "[ADR-0003] Adopt the snapshot router",
+    "description": "Tracking issue for the accepted decision.\n\n<!-- conduit:task:adr-0003 -->",
+    "state": "opened",
+    "created_at": "2026-06-01T09:00:00.000Z",
+    "updated_at": "2026-06-02T10:00:00.000Z",
+    "labels": ["adr:ADR-0003", "conduit:run"],
+    "author": {"id": 2, "username": "conduit-bot", "name": "Conduit Bot", "state": "active"},
+    "user_notes_count": 1,
+    "web_url": "https://gitlab.example.test/fixture-owner/fixture-repo/-/issues/1"
+  },
+  {
+    "id": 9002,
+    "iid": 2,
+    "project_id": 7,
+    "title": "Unrelated human issue",
+    "description": "Not conduit's business.",
+    "state": "opened",
+    "created_at": "2026-06-01T11:00:00.000Z",
+    "updated_at": "2026-06-01T11:00:00.000Z",
+    "labels": ["bug"],
+    "author": {"id": 3, "username": "human", "name": "A Human", "state": "active"},
+    "user_notes_count": 0,
+    "web_url": "https://gitlab.example.test/fixture-owner/fixture-repo/-/issues/2"
+  },
+  {
+    "id": 9003,
+    "iid": 3,
+    "project_id": 7,
+    "title": "[ADR-0001] Single crate, fully synchronous",
+    "description": "Closed after the merge.\n\n<!-- conduit:task:adr-0001 -->",
+    "state": "closed",
+    "created_at": "2026-05-20T08:00:00.000Z",
+    "updated_at": "2026-05-28T16:00:00.000Z",
+    "closed_at": "2026-05-28T16:00:00.000Z",
+    "labels": ["adr:ADR-0001"],
+    "author": {"id": 2, "username": "conduit-bot", "name": "Conduit Bot", "state": "active"},
+    "user_notes_count": 2,
+    "web_url": "https://gitlab.example.test/fixture-owner/fixture-repo/-/issues/3"
+  }
+]

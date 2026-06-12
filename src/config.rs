@@ -14,6 +14,7 @@ use crate::contract::EffortThresholds;
 pub enum ForgeKind {
     Gitea,
     Github,
+    Gitlab,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +43,7 @@ pub struct ForgeConfig {
     pub default: ForgeKind,
     pub gitea: GiteaConfig,
     pub github: GithubConfig,
+    pub gitlab: GitlabConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +62,17 @@ pub struct GithubConfig {
     pub owner: String,
     pub repo: String,
     // token: env GITHUB_TOKEN only (live READS; mutations always DryRun).
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GitlabConfig {
+    /// Instance base URL — gitlab.com or a self-hosted instance.
+    pub base_url: String,
+    pub owner: String,
+    pub repo: String,
+    // token: env GITLAB_TOKEN only (live READS; mutations always DryRun —
+    // ADR-0016: same posture as GitHub).
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +122,7 @@ impl Default for ForgeConfig {
             default: ForgeKind::Gitea,
             gitea: GiteaConfig::default(),
             github: GithubConfig::default(),
+            gitlab: GitlabConfig::default(),
         }
     }
 }
@@ -127,6 +141,16 @@ impl Default for GiteaConfig {
 impl Default for GithubConfig {
     fn default() -> Self {
         GithubConfig {
+            owner: String::new(),
+            repo: String::new(),
+        }
+    }
+}
+
+impl Default for GitlabConfig {
+    fn default() -> Self {
+        GitlabConfig {
+            base_url: "https://gitlab.com".to_string(),
             owner: String::new(),
             repo: String::new(),
         }
@@ -180,7 +204,7 @@ pub enum ConfigError {
 
 impl Config {
     /// Load `conduit.toml` from `dir` (missing file = all defaults), then
-    /// overlay env: CONDUIT_FORGE (gitea|github), CONDUIT_ENGINE
+    /// overlay env: CONDUIT_FORGE (gitea|github|gitlab), CONDUIT_ENGINE
     /// (fake|claude-code), CONDUIT_TIMEOUT_SECS, CONDUIT_POLL_SECS.
     pub fn load(dir: &std::path::Path) -> Result<Config, ConfigError> {
         let path = dir.join("conduit.toml");
@@ -195,6 +219,7 @@ impl Config {
             config.forge.default = match val.as_str() {
                 "gitea" => ForgeKind::Gitea,
                 "github" => ForgeKind::Github,
+                "gitlab" => ForgeKind::Gitlab,
                 _ => {
                     return Err(ConfigError::Env {
                         var: "CONDUIT_FORGE".to_string(),
@@ -298,8 +323,28 @@ mod tests {
         assert_eq!(c.engine.kind, EngineKind::Fake);
         assert_eq!(c.engine.timeout_secs, 1800);
         assert_eq!(c.forge.gitea.base_url, "http://localhost:3000");
+        assert_eq!(c.forge.gitlab.base_url, "https://gitlab.com");
         assert_eq!(c.adroit.ai_provider, "ollama");
         assert_eq!(c.poll.interval_secs, 15);
+    }
+
+    #[test]
+    fn gitlab_section_parses_with_self_hosted_base_url() {
+        let d = TempDir::new().unwrap();
+        std::fs::write(
+            d.path().join("conduit.toml"),
+            "[forge]\ndefault = \"gitlab\"\n\n[forge.gitlab]\nbase_url = \"https://gitlab.example.test\"\nowner = \"octo\"\nrepo = \"example\"\n",
+        )
+        .unwrap();
+        let c = Config::load(d.path()).unwrap();
+        // Guard: only assert the default when the env overlay is absent in
+        // the test runner (same guard as the gitea token test).
+        if std::env::var("CONDUIT_FORGE").is_err() {
+            assert_eq!(c.forge.default, ForgeKind::Gitlab);
+        }
+        assert_eq!(c.forge.gitlab.base_url, "https://gitlab.example.test");
+        assert_eq!(c.forge.gitlab.owner, "octo");
+        assert_eq!(c.forge.gitlab.repo, "example");
     }
 
     #[test]

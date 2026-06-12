@@ -17,6 +17,7 @@ fn conduit(dir: &TempDir) -> Command {
         "CONDUIT_ADROIT_BIN",
         "CONDUIT_FAKE_ENGINE_MODE",
         "GITHUB_TOKEN",
+        "GITLAB_TOKEN",
     ] {
         cmd.env_remove(var);
     }
@@ -300,4 +301,42 @@ fn demo_transcript_github_leg_is_deterministic_normalized_jsonl() {
         "synthesized DryRun ids must never leak raw"
     );
     assert!(!first.contains("_at\""), "timestamps omitted");
+}
+
+/// The gitlab transcript leg is hermetic by the same construction (DryRun
+/// mutations, no polling, no git) — and the N=3 cross-leg assertion: its
+/// normalized stream must be BYTE-IDENTICAL to the github leg's, because
+/// both ride the one shared emitter/normalizer. The live gitea third way is
+/// the demo-kit beat (it needs the throwaway forge).
+#[test]
+fn demo_transcript_gitlab_leg_matches_the_github_leg_byte_for_byte() {
+    let d = TempDir::new().unwrap();
+    let run = |forge: &str| -> String {
+        let out = conduit(&d)
+            .args(["demo-transcript", "3", "--forge", forge])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let gitlab_first = run("gitlab");
+    let gitlab_second = run("gitlab");
+    assert_eq!(
+        gitlab_first, gitlab_second,
+        "the gitlab transcript must diff clean across runs"
+    );
+    let github = run("github");
+    assert_eq!(
+        gitlab_first, github,
+        "gitlab and github record-only legs must be byte-identical"
+    );
+    assert_eq!(
+        gitlab_first.lines().count(),
+        7,
+        "the full scripted lifecycle: {gitlab_first}"
+    );
 }

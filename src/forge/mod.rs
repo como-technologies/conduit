@@ -1,6 +1,6 @@
-//! THE KEYSTONE (spec §The forge adapter): one trait both forges implement
-//! identically, proven by tests/conformance.rs. Events are NEVER produced by
-//! adapters — only by the shared pure [`diff`].
+//! THE KEYSTONE (spec §The forge adapter): one trait every forge adapter
+//! implements identically, proven by tests/conformance.rs. Events are NEVER
+//! produced by adapters — only by the shared pure [`diff`].
 //!
 //! Diff semantics (the contract):
 //! - `IssueLabeled`: fires for each label present on an issue in `next` but
@@ -36,9 +36,14 @@
 //! exception: a forge where dismissal is a ONE-WAY in-place state mutation on
 //! the same id (GitHub's DISMISSED) may skip those rows, because a skipped id
 //! can never reappear with a submitted verdict — see each adapter's module
-//! header. Either way a dismissal fires nothing; that is fine because merge
-//! is a human gate. A resubmission gets a new forge-native id on both forges
-//! and correctly fires.
+//! header. A third shape exists (GitLab): dismissal-by-REMOVAL — the forge
+//! itself deletes the row (an unapproved approval vanishes from the API), so
+//! there is nothing to keep OR skip; identity must then be synthesized so
+//! that a re-submission mints a NEW id (GitLab: user id + the documented
+//! `approved_at` timestamp) and a vanished id can never reappear bearing the
+//! same verdict instance. Whatever the shape, a dismissal fires nothing;
+//! that is fine because merge is a human gate. A resubmission gets a new
+//! forge-native (or synthesized) id on every forge and correctly fires.
 //!
 //! Snapshots must be id-unique: duplicate issue/PR ids in `prev` are
 //! last-wins; duplicates in `next` fire duplicate events. Uniqueness is the
@@ -51,6 +56,7 @@ pub mod dry_run;
 pub mod fake;
 pub mod gitea;
 pub mod github;
+pub mod gitlab;
 
 use std::collections::HashMap;
 
@@ -386,7 +392,8 @@ pub(crate) fn rest_call(
 }
 
 /// Pull the forge's error text from a failed body: the JSON `message` field
-/// (both GitHub and Gitea use it), else the lossy body string.
+/// (GitHub, Gitea and GitLab all use it), else the lossy body string — which
+/// also covers GitLab's occasional non-string `message` (validation objects).
 fn extract_error(body: &[u8]) -> String {
     if let Ok(v) = serde_json::from_slice::<serde_json::Value>(body)
         && let Some(msg) = v.get("message").and_then(|m| m.as_str())

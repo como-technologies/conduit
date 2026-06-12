@@ -1,6 +1,6 @@
 //! CLI surface (spec §Module layout):
 //! init | plan <address> | run [--once] | status | verify <address> | demo-transcript <address>
-//! Globals: --forge <gitea|github>, -o/--output <human|json>.
+//! Globals: --forge <gitea|github|gitlab>, -o/--output <human|json>.
 //!
 //! Behavior contract per spec §Demo script; `verify` is the executable spec
 //! of §The tuesday contract. All wiring lives here — the binary's `main.rs`
@@ -98,8 +98,9 @@ pub fn dispatch(cli: Cli) -> anyhow::Result<()> {
 // ── Assembly helpers ───────────────────────────────────────────────────────
 
 /// The chosen adapter + its cursor key. Gitea is the full read-write
-/// lifecycle host; GitHub is ALWAYS DryRun-decorated (reads live, mutations
-/// recorded — the constructor only hands out the wrapper).
+/// lifecycle host; GitHub and GitLab are ALWAYS DryRun-decorated (reads
+/// live, mutations recorded — their constructors only hand out the wrapper;
+/// ADR-0012 / ADR-0016).
 fn build_forge(dir: &Path, config: &Config) -> (Box<dyn Forge>, &'static str) {
     match config.forge.default {
         ForgeKind::Gitea => {
@@ -120,6 +121,16 @@ fn build_forge(dir: &Path, config: &Config) -> (Box<dyn Forge>, &'static str) {
                     token,
                 )),
                 "github",
+            )
+        }
+        ForgeKind::Gitlab => {
+            let token = crate::forge::gitlab::resolve_token().unwrap_or_default();
+            (
+                Box::new(crate::forge::gitlab::open_gitlab(
+                    &config.forge.gitlab,
+                    token,
+                )),
+                "gitlab",
             )
         }
     }
@@ -514,7 +525,8 @@ fn branch_is_conduit_shaped(branch: &str) -> bool {
 /// polling — the fixture scenario through the real machine, actions emitted
 /// through the chosen adapter, normalized JSONL on stdout. The gitea leg
 /// EXECUTES (live adapter + real git against the throwaway forge); the
-/// github leg is DryRun + no git, transcript-only by construction.
+/// github and gitlab legs are DryRun + no git, transcript-only by
+/// construction — the three-way diff is the N=3 forge-neutrality proof.
 fn cmd_demo_transcript(dir: &Path, config: &Config, address: &str) -> anyhow::Result<()> {
     let reference = reference_from_address(address)?;
     let lines = match config.forge.default {
@@ -536,6 +548,12 @@ fn cmd_demo_transcript(dir: &Path, config: &Config, address: &str) -> anyhow::Re
             let token = crate::forge::github::resolve_token().unwrap_or_default();
             let forge = crate::forge::github::open_github(&config.forge.github, token);
             let slug = repo_slug(&config.forge.github.owner, &config.forge.github.repo);
+            crate::transcript::run(&forge, slug, &reference, address, config, None)?
+        }
+        ForgeKind::Gitlab => {
+            let token = crate::forge::gitlab::resolve_token().unwrap_or_default();
+            let forge = crate::forge::gitlab::open_gitlab(&config.forge.gitlab, token);
+            let slug = repo_slug(&config.forge.gitlab.owner, &config.forge.gitlab.repo);
             crate::transcript::run(&forge, slug, &reference, address, config, None)?
         }
     };

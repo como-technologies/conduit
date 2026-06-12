@@ -1,0 +1,14 @@
+[
+  {
+    "id": 501,
+    "iid": 21,
+    "project_id": 7,
+    "sha": "1aab2cc3dd4ee5ff60718293a4b5c6d7e8f90a1b",
+    "ref": "conduit/adr-0003/adopt-the-snapshot-router",
+    "status": "success",
+    "source": "push",
+    "created_at": "2026-06-02T10:01:00.000Z",
+    "updated_at": "2026-06-02T10:05:00.000Z",
+    "web_url": "https://gitlab.example.test/fixture-owner/fixture-repo/-/pipelines/501"
+  }
+]
