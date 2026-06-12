@@ -101,10 +101,13 @@ fn redact_labels(labels: &[String]) -> Vec<String> {
 /// placeholder table registers it in mutation order, but the id never appears
 /// in the line itself.
 ///
-/// MAINTENANCE OBLIGATION: this enum must cover EVERY mutation on the `Forge`
-/// trait. Adding a trait mutation without (a) a variant here, (b) a
-/// `normalize_action` arm, and (c) a `DryRunForge` record call silently
-/// bypasses the transcript — nothing enforces the trio at compile time.
+/// TRIO OBLIGATION (mechanically enforced): this enum must cover EVERY
+/// mutation on the `Forge` trait, with (a) a variant here, (b) a
+/// `normalize_action` arm (the match has no wildcard — the compiler enforces
+/// it once the variant exists), and (c) a `DryRunForge` record call. The
+/// `forge_call_trio_covers_every_forge_mutation` test below fails CLOSED on
+/// any new trait method until it is either classified as a read or given the
+/// full trio (plus FakeForge's RecordedAction/fail_next coverage).
 pub enum ForgeCall<'a> {
     EnsureLabels {
         labels: &'a [LabelSpec],
@@ -767,6 +770,113 @@ mod tests {
             2,
             "each run is a fresh demo issue"
         );
+    }
+
+    /// The trio obligation, mechanical and fail-closed (done-criterion 6):
+    /// every `Forge` trait method is either a classified READ or a mutation
+    /// carrying the full trio — a `ForgeCall` variant, a `normalize_action`
+    /// arm, a `DryRunForge` record call — plus FakeForge's `RecordedAction`
+    /// variant and `fail_next` VALID entry. A NEW trait method fails this
+    /// test until it is classified or covered; a stale read entry fails too.
+    /// (The normalize_action arm itself is compiler-enforced: the match has
+    /// no wildcard, so a variant without an arm does not compile.)
+    #[test]
+    fn forge_call_trio_covers_every_forge_mutation() {
+        let src = |rel: &str| {
+            let p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+            std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {p:?}: {e}"))
+        };
+        let forge_mod = src("src/forge/mod.rs");
+        let transcript = src("src/transcript.rs");
+        let dry_run = src("src/forge/dry_run.rs");
+        let fake = src("src/forge/fake.rs");
+
+        // Extract the `Forge` trait body (ends at the first column-0 `}`).
+        let start = forge_mod
+            .find("pub trait Forge {")
+            .expect("Forge trait found");
+        let body = &forge_mod[start..];
+        let end = body.find("\n}").expect("trait body closes");
+        let body = &body[..end];
+        let methods: Vec<&str> = body
+            .lines()
+            .filter_map(|l| {
+                let l = l.trim_start();
+                let rest = l.strip_prefix("fn ")?;
+                Some(rest.split('(').next().unwrap().trim())
+            })
+            .collect();
+        assert!(methods.len() >= 13, "trait parse looks broken: {methods:?}");
+
+        // The classified reads — everything else is a mutation and owes the
+        // trio. A new read must be added HERE (deliberately, in review).
+        const READS: &[&str] = &[
+            "describe",
+            "git_remote_url",
+            "fetch_snapshot",
+            "find_open_pr_by_head",
+            "find_issue_by_marker",
+        ];
+        for read in READS {
+            assert!(
+                methods.contains(read),
+                "stale READS entry {read:?} — method gone from the trait"
+            );
+        }
+
+        let camel = |snake: &str| -> String {
+            snake
+                .split('_')
+                .map(|seg| {
+                    let mut c = seg.chars();
+                    match c.next() {
+                        Some(first) => first.to_ascii_uppercase().to_string() + c.as_str(),
+                        None => String::new(),
+                    }
+                })
+                .collect()
+        };
+
+        // The ForgeCall enum body, for variant-presence checks.
+        let enum_start = transcript
+            .find("pub enum ForgeCall<'a> {")
+            .expect("ForgeCall enum found");
+        let enum_body = &transcript[enum_start..];
+        let enum_body = &enum_body[..enum_body.find("\n}").expect("enum closes")];
+        // The normalize_action fn body (runs to the next column-0 `}`).
+        let norm_start = transcript
+            .find("pub fn normalize_action")
+            .expect("normalize_action found");
+        let norm_body = &transcript[norm_start..];
+        let norm_body = &norm_body[..norm_body.find("\n}").expect("fn closes")];
+
+        for method in methods {
+            if READS.contains(&method) {
+                continue;
+            }
+            let variant = camel(method);
+            assert!(
+                enum_body.contains(&format!("    {variant} {{"))
+                    || enum_body.contains(&format!("    {variant}(")),
+                "mutation {method:?}: no ForgeCall::{variant} variant (trio leg a)"
+            );
+            assert!(
+                norm_body.contains(&format!("ForgeCall::{variant}")),
+                "mutation {method:?}: no normalize_action arm for ForgeCall::{variant} (trio leg b)"
+            );
+            assert!(
+                dry_run.contains(&format!("ForgeCall::{variant}")),
+                "mutation {method:?}: DryRunForge never records ForgeCall::{variant} (trio leg c)"
+            );
+            assert!(
+                fake.contains(&format!("{variant} {{")) || fake.contains(&format!("{variant}(")),
+                "mutation {method:?}: FakeForge::RecordedAction has no {variant} variant"
+            );
+            assert!(
+                fake.contains(&format!("\"{method}\"")),
+                "mutation {method:?}: FakeForge::fail_next VALID list misses it"
+            );
+        }
     }
 
     #[test]
