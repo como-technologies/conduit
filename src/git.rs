@@ -129,9 +129,13 @@ pub fn create_workspace(
     Ok(())
 }
 
-/// Stage everything EXCEPT conduit's artifacts (pathspec
-/// `:(exclude).conduit-task.md`), delete the task file first, commit with
-/// `message`. Returns false when there is nothing to commit.
+/// Stage everything EXCEPT conduit's artifacts (recursive glob pathspec
+/// `:(exclude,glob)**/.conduit-task.md`), delete the root task file first,
+/// commit with `message`. Returns false when there is nothing to commit.
+///
+/// The exclude is RECURSIVE: the engine is untrusted, and a nested copy of
+/// the task doc it writes in any subdirectory must never land in a PR
+/// (spec §Committing — "never lands" is absolute).
 pub fn commit_all_except_task_file(ws: &Path, message: &str) -> Result<bool, GitError> {
     match std::fs::remove_file(ws.join(".conduit-task.md")) {
         Ok(()) => {}
@@ -139,11 +143,12 @@ pub fn commit_all_except_task_file(ws: &Path, message: &str) -> Result<bool, Git
         Err(e) => return Err(e.into()),
     }
     // Exclude-only pathspec = "everything except" — also guards against a
-    // task file that somehow became tracked historically.
+    // task file that somehow became tracked historically. `**/` with glob
+    // magic matches zero or more leading directories (root + any depth).
     run_git_ok(
         Some(ws),
         &[],
-        &["add", "-A", "--", ":(exclude).conduit-task.md"],
+        &["add", "-A", "--", ":(exclude,glob)**/.conduit-task.md"],
     )?;
     // `diff --cached --quiet`: exit 0 = nothing staged, 1 = changes staged.
     let diff = run_git(Some(ws), &[], &["diff", "--cached", "--quiet"])?;
@@ -299,8 +304,11 @@ mod tests {
             origin.trim().ends_with("cache.git"),
             "origin must be the local cache: {origin}"
         );
-        // engine writes files incl. the task doc; commit excludes the task doc
+        // engine writes files incl. the task doc; commit excludes the task
+        // doc at EVERY depth (untrusted engine may write nested copies)
         std::fs::write(ws.join(".conduit-task.md"), "instructions").unwrap();
+        std::fs::create_dir_all(ws.join("docs/impl")).unwrap();
+        std::fs::write(ws.join("docs/impl/.conduit-task.md"), "nested copy").unwrap();
         std::fs::create_dir_all(ws.join("docs/impl")).unwrap();
         std::fs::write(ws.join("docs/impl/adr-0003.md"), "impl").unwrap();
         let committed =
