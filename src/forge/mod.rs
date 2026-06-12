@@ -29,6 +29,17 @@
 //! `PrMerged` forever and wedges the task. The conformance suite asserts this
 //! adapter obligation.
 //!
+//! Reviews are never filtered from a PR's snapshot: keep dismissed reviews
+//! with their original verdict so ids stay stable in `prev` — filtering one
+//! out and letting it reappear would re-fire `ReviewSubmitted`. A cross-poll
+//! dismissal that mutates a review's verdict in place (same id) fires
+//! nothing; that is fine because merge is a human gate. A resubmission gets a
+//! new forge-native id on both forges and correctly fires.
+//!
+//! Snapshots must be id-unique: duplicate issue/PR ids in `prev` are
+//! last-wins; duplicates in `next` fire duplicate events. Uniqueness is the
+//! adapter's obligation.
+//!
 //! Note: `IssueSnapshot.closed` is carried for adapters/probes but is not read
 //! by `diff()` — no issue-closed event exists by design.
 
@@ -311,6 +322,12 @@ fn read_response(resp: ureq::http::Response<ureq::Body>) -> HttpResponse {
 /// empty 2xx body, else parse JSON. `label` names the provider in the
 /// parse-error message. Error text extraction: the JSON `message` field if
 /// present, else the lossy body string.
+///
+/// Pagination: `HttpResponse` carries no headers, so Link-header pagination
+/// is unreachable by design. Adapters MUST paginate with explicit
+/// `?page=N&per_page=...` query loops, stopping on a short page — a naive
+/// page-1-only fetch silently truncates at the forges' default per_page=30
+/// and violates the snapshot disappearance rule above.
 #[allow(dead_code)] // consumed by the gitea.rs / github.rs adapters (next tasks)
 pub(crate) fn rest_call(
     transport: &dyn HttpTransport,
