@@ -29,12 +29,16 @@
 //! `PrMerged` forever and wedges the task. The conformance suite asserts this
 //! adapter obligation.
 //!
-//! Reviews are never filtered from a PR's snapshot: keep dismissed reviews
-//! with their original verdict so ids stay stable in `prev` — filtering one
-//! out and letting it reappear would re-fire `ReviewSubmitted`. A cross-poll
-//! dismissal that mutates a review's verdict in place (same id) fires
-//! nothing; that is fine because merge is a human gate. A resubmission gets a
-//! new forge-native id on both forges and correctly fires.
+//! Reviews are never filtered from a PR's snapshot when the forge can make a
+//! filtered review reappear: keep dismissed reviews with their original
+//! verdict so ids stay stable in `prev` (Gitea does this) — filtering one out
+//! and letting it reappear would re-fire `ReviewSubmitted`. The narrow
+//! exception: a forge where dismissal is a ONE-WAY in-place state mutation on
+//! the same id (GitHub's DISMISSED) may skip those rows, because a skipped id
+//! can never reappear with a submitted verdict — see each adapter's module
+//! header. Either way a dismissal fires nothing; that is fine because merge
+//! is a human gate. A resubmission gets a new forge-native id on both forges
+//! and correctly fires.
 //!
 //! Snapshots must be id-unique: duplicate issue/PR ids in `prev` are
 //! last-wins; duplicates in `next` fire duplicate events. Uniqueness is the
