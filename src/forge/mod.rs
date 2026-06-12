@@ -44,6 +44,7 @@
 //! by `diff()` — no issue-closed event exists by design.
 
 pub mod fake;
+pub mod gitea;
 
 use std::collections::HashMap;
 
@@ -330,7 +331,6 @@ fn read_response(resp: ureq::http::Response<ureq::Body>) -> HttpResponse {
 /// `?page=N&per_page=...` query loops, stopping on a short page — a naive
 /// page-1-only fetch silently truncates at the forges' default per_page=30
 /// and violates the snapshot disappearance rule above.
-#[allow(dead_code)] // consumed by the gitea.rs / github.rs adapters (next tasks)
 pub(crate) fn rest_call(
     transport: &dyn HttpTransport,
     method: &str,

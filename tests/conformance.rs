@@ -300,5 +300,101 @@ fn fake_forge_close_unknown_is_404() {
     run_close_unknown_issue_is_404(&forge);
 }
 
-// Live legs are added by Task 8 (CONDUIT_E2E_GITEA=1) and Task 9
-// (recorded fixtures always-on + CONDUIT_E2E_GITHUB=1 live reads).
+// The GitHub leg is added by Task 9 (recorded fixtures always-on +
+// CONDUIT_E2E_GITHUB=1 live reads).
+
+/// Live Gitea leg — needs `just forge-up` first. The tag is time-randomized
+/// so re-runs don't collide on the persistent container state.
+#[test]
+fn gitea_live_conforms() {
+    if std::env::var("CONDUIT_E2E_GITEA").as_deref() != Ok("1") {
+        eprintln!("skip: set CONDUIT_E2E_GITEA=1 (and run `just forge-up`)");
+        return;
+    }
+    let token = std::fs::read_to_string(".secrets/conduit-bot.token")
+        .expect("run `just forge-up` first")
+        .trim()
+        .to_string();
+    let cfg = conduit::config::GiteaConfig::default();
+    let forge = conduit::forge::gitea::GiteaForge::open(&cfg, token.clone());
+    let tag = format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    );
+    // run_conformance opens a PR from head `conduit/adr-0001/conformance-{tag}`.
+    // On a real forge that branch must exist BEFORE open_pr (in production
+    // conduit's git layer pushes it first — see PrDraft::head). Seed it with
+    // one committed file via the contents API.
+    seed_branch(
+        &cfg,
+        &token,
+        &format!("conduit/adr-0001/conformance-{tag}"),
+        &tag,
+    );
+    run_conformance(&forge, &tag);
+}
+
+/// Create `branch` off main with one new file (Gitea contents API:
+/// `new_branch` creates the branch as part of the commit).
+fn seed_branch(cfg: &conduit::config::GiteaConfig, token: &str, branch: &str, tag: &str) {
+    use conduit::forge::{HttpTransport, UreqTransport};
+    let url = format!(
+        "{}/api/v1/repos/{}/{}/contents/conformance-{tag}.txt",
+        cfg.base_url, cfg.owner, cfg.repo
+    );
+    let body = serde_json::json!({
+        "content": base64(b"conformance probe\n"),
+        "message": format!("test: conformance probe {tag}"),
+        "branch": "main",
+        "new_branch": branch,
+    });
+    let auth = format!("token {token}");
+    let resp = UreqTransport
+        .request(
+            "POST",
+            &url,
+            &[
+                ("Authorization", &auth),
+                ("Content-Type", "application/json"),
+            ],
+            Some(&serde_json::to_vec(&body).unwrap()),
+        )
+        .expect("seed branch request");
+    assert!(
+        (200..300).contains(&resp.status),
+        "seed branch failed: HTTP {} {}",
+        resp.status,
+        String::from_utf8_lossy(&resp.body)
+    );
+}
+
+/// Minimal RFC 4648 base64 (the contents API wants base64 content; not worth
+/// a dependency for one test helper).
+fn base64(data: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}

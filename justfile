@@ -34,6 +34,15 @@ check:
 run *ARGS:
     cargo run -- {{ARGS}}
 
+# Throwaway Gitea on localhost:3000 — two users, labels, seeded repo
+forge-up:
+    docker compose -f demo/docker-compose.yml up -d
+    bash demo/gitea-init.sh
+
+# Destroy the throwaway forge (container + volume — nothing survives)
+forge-down:
+    docker compose -f demo/docker-compose.yml down -v
+
 # Build the user manual (mdbook)
 book:
     mdbook build docs
