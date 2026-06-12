@@ -6,6 +6,7 @@
 //! .conduit/
 //! ├── tasks/<task-id>.json     TaskRecord incl. pending ActionIntents
 //! ├── plans/<task-id>.md       verbatim plan snapshot (sha256 on the record)
+//! ├── plans/<task-id>.adr.md   ADR sidecar written alongside the plan snapshot
 //! ├── cursor/<forge>.json      previous RepoSnapshot per forge (the poll cursor)
 //! ├── cache/<forge>.git        local bare git cache (Task 11, git.rs)
 //! ├── workspaces/<task-id>-a<attempt>/   engine workspaces (disposable)

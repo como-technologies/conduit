@@ -19,8 +19,12 @@ thin layer they don't have:
 
 1. a **forge-neutral event router**,
 2. a **PR/MR lifecycle state machine**, and
-3. the **forge adapter** that drives GitHub, GitLab, and self-hosted forges
-   identically — the net-new IP.
+3. the **forge adapter** — the net-new IP.
 
-Status: spike in progress. See the [spike design](./dev/spike-design.md) for
-the normative architecture, scope, and demo.
+conduit **drives GitHub and self-hosted Gitea identically today** — proven by a
+shared conformance suite and a byte-identical transcript diff; GitLab is the
+planned third implementation.
+
+Status: spike complete. See the [demo walkthrough](./usage/demo.md) for
+evidence, and the [spike design](./dev/spike-design.md) for the historical
+normative architecture.

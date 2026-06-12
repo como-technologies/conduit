@@ -4,6 +4,11 @@
 > three-architecture judge panel. This page is the normative design; the
 > decisions it locks are also recorded as ADRs in the in-repo `adr/` corpus.
 
+> **Landed 2026-06-12 on the spike branch; this page is the historical design.**
+> The as-built module map (incl. `src/transcript.rs`, `tests/cli.rs`) lives in
+> [Architecture](./architecture.md); `PrSnapshot` additionally grew `title`/`body`
+> to power verify.
+
 ## One line
 
 conduit is the Adopt-stage engine of the TAPS loop: a thin, forge-neutral
