@@ -114,15 +114,17 @@ evidence "the tuesday contract, 6/6 (exit 0)"
 jq -r '.checks[] | "   \(if .pass then "PASS" else "FAIL" end)  \(.name)"' "$WORK/conduit-verify.json"
 jq -r '"   overall: pass=\(.pass)  pr=\(.pr)  task=\(.task)"' "$WORK/conduit-verify.json"
 
-# ── 7. Forge neutrality: same lifecycle, byte-identical on another forge ───
+# ── 7. Forge neutrality: same lifecycle, byte-identical on N=3 forges ──────
 echo
-echo " RUN: conduit demo-transcript 5 --forge gitea|github + diff   (the forge-neutrality money shot)"
+echo " RUN: conduit demo-transcript 5 --forge gitea|github|gitlab + diff   (the forge-neutrality money shot, N=3)"
 "$CONDUIT" demo-transcript 5 --forge gitea >"$WORK/t-gitea.jsonl"
 "$CONDUIT" demo-transcript 5 --forge github >"$WORK/t-github.jsonl"
-evidence "normalized action transcripts, gitea (live) vs github (DryRun)"
-if diff -q "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" >/dev/null; then
-    echo "   FORGE-NEUTRAL: identical ($(wc -l <"$WORK/t-gitea.jsonl") lines)"
-    sha256sum "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" | sed 's/^/   /'
+"$CONDUIT" demo-transcript 5 --forge gitlab >"$WORK/t-gitlab.jsonl"
+evidence "normalized action transcripts, gitea (live) vs github (DryRun) vs gitlab (DryRun)"
+if diff -q "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" >/dev/null &&
+    diff -q "$WORK/t-gitea.jsonl" "$WORK/t-gitlab.jsonl" >/dev/null; then
+    echo "   FORGE-NEUTRAL (N=3): identical ($(wc -l <"$WORK/t-gitea.jsonl") lines)"
+    sha256sum "$WORK/t-gitea.jsonl" "$WORK/t-github.jsonl" "$WORK/t-gitlab.jsonl" | sed 's/^/   /'
 else
     die "transcripts differ between forges"
 fi

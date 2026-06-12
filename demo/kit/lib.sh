@@ -51,11 +51,28 @@ die() {
 }
 
 # ── Timing ─────────────────────────────────────────────────────────────────
+#
+# MONOTONIC, deliberately (iteration-3 A3; rehearsal-2 wart): on WSL2 the
+# realtime clock can be stepped by host clock-sync mid-demo — rehearsal 2
+# recorded the kit's `date +%s` WALL-CLOCK lines ~23s short of the
+# assessments binary's own monotonic elapsed marks in beat 2. The binaries
+# all time monotonically, so the kit must too: /proc/uptime is the kernel's
+# monotonic-since-boot clock (immune to steps), and the narration never
+# shows two different numbers for the same run again. The label stays
+# WALL-CLOCK — it is still elapsed real time, just measured on a clock that
+# cannot jump. (Fallback: date +%s where /proc/uptime is unreadable.)
 
 BEAT_T0=""
-beat_start() { BEAT_T0=$(date +%s); }
+monotonic_secs() {
+    if [ -r /proc/uptime ]; then
+        awk '{print int($1)}' /proc/uptime
+    else
+        date +%s
+    fi
+}
+beat_start() { BEAT_T0=$(monotonic_secs); }
 beat_end() { # beat_end "beat-2-assess (pre-baked)"
-    local secs=$(($(date +%s) - BEAT_T0))
+    local secs=$(($(monotonic_secs) - BEAT_T0))
     echo
     echo " WALL-CLOCK: $1 took ${secs}s"
 }
