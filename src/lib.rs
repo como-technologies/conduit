@@ -4,3 +4,5 @@
 //! human rendering only. Spec: docs/src/dev/spike-design.md.
 
 pub mod contract;
+pub mod machine;
+pub mod task;
