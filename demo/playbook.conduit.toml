@@ -1,0 +1,23 @@
+# The exact conduit config the playbook-corpus demo runs with.
+# demo/playbook-demo-init.sh copies this into the per-run workdir as
+# conduit.toml, substituting @ADROIT_DIR@ with the resolved absolute path of
+# the playbook ADR corpus (PLAYBOOK_DIR/src/adrs). Everything else is
+# explicit so the demo's effective config is fully documented here.
+
+[forge]
+default = "gitea"
+
+[forge.gitea]
+base_url = "http://localhost:3000"
+owner = "como"
+repo = "playbook" # gitea-init.sh seeding: REPO_NAME=playbook SEED_REPO_DIR=../playbook
+
+[engine]
+kind = "fake" # the deterministic demo engine; CONDUIT_ENGINE=claude-code for the encore
+timeout_secs = 900
+
+[adroit]
+dir = "@ADROIT_DIR@" # resolved by playbook-demo-init.sh -> <playbook>/src/adrs
+# ai_provider/ai_model defaults are irrelevant to the demo path: the demo
+# plans an ADR that carries a STORED plan — a deterministic, provider-free
+# read; no AI env is needed.

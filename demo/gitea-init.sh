@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
 # Bootstrap the throwaway demo Gitea (spec §Self-dogfood): two users
 # (conduit-bot = the actor; reviewer = the human gate — Gitea blocks
-# self-approval, hence two users), org como, repo conduit-dogfood seeded by
-# pushing THIS repo, and the tuesday-contract labels. Idempotent — safe to
-# re-run. Tokens land in gitignored .secrets/ (chmod 600). Nothing here ever
-# leaves localhost; the push below is the one sanctioned push target.
+# self-approval, hence two users), org como, one seeded repo, and the
+# tuesday-contract labels. Idempotent — safe to re-run. Tokens land in
+# gitignored .secrets/ under THIS repo with pinned filenames
+# (conduit-bot.token / reviewer.token), whichever repo is seeded. Nothing
+# here ever leaves localhost; the push below is the one sanctioned push
+# target.
+#
+# Parameters (env; defaults preserve the self-dogfood demo):
+#   SEED_REPO_DIR  local git repo whose `main` seeds the forge repo
+#                  (default: this repo; relative paths resolve from the
+#                  conduit repo root). E.g. ../playbook for the playbook
+#                  corpus demo.
+#   REPO_NAME      forge repo name under org como
+#                  (default: conduit-dogfood).
 set -euo pipefail
 
 cd "$(dirname "$0")/.." # repo root
+SEED_REPO_DIR="${SEED_REPO_DIR:-.}"
+REPO_NAME="${REPO_NAME:-conduit-dogfood}"
+if [ ! -d "$SEED_REPO_DIR/.git" ]; then
+  echo "ERROR: SEED_REPO_DIR=$SEED_REPO_DIR is not a git repo" >&2
+  exit 1
+fi
 COMPOSE=(docker compose -f demo/docker-compose.yml)
 BASE="http://localhost:3000"
 API="$BASE/api/v1"
@@ -96,22 +112,22 @@ api() {
 # 4. Org + repo, as conduit-bot (422/409 = already there).
 api POST /orgs '{"username":"como"}' 201 409 422
 api POST /orgs/como/repos \
-  '{"name":"conduit-dogfood","private":false,"default_branch":"main"}' 201 409
+  "{\"name\":\"$REPO_NAME\",\"private\":false,\"default_branch\":\"main\"}" 201 409
 
-# 5. Seed by pushing THIS repo's main to the container — the one sanctioned
+# 5. Seed by pushing the seed repo's main to the container — the one sanctioned
 #    push target (throwaway, localhost-only; -f is fine here). The token rides
 #    the child ENV via a one-shot credential helper, never the URL: argv is
 #    world-readable (ps, /proc) — the same follow-up-1 rule src/git.rs enforces.
 #    Single quotes keep the $GIT_* references literal in argv; git's shell
 #    expands them from the environment.
-GIT_USERNAME=conduit-bot GIT_PASSWORD="$TOK" git \
+GIT_USERNAME=conduit-bot GIT_PASSWORD="$TOK" git -C "$SEED_REPO_DIR" \
   -c credential.helper= \
   -c 'credential.helper=!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
-  push -f http://localhost:3000/como/conduit-dogfood.git main:main
+  push -f "http://localhost:3000/como/$REPO_NAME.git" main:main
 
 # 6. The tuesday-contract labels (colors: bare hex, no '#').
 label() {
-  api POST /repos/como/conduit-dogfood/labels \
+  api POST "/repos/como/$REPO_NAME/labels" \
     "{\"name\":\"$1\",\"color\":\"$2\",\"description\":\"$3\"}" 201 409 422
 }
 label "effort:1-super-quick" "0e8a16" "under 10 minutes"
@@ -123,7 +139,7 @@ label "conduit:run" "1d76db" "human trigger: start this task"
 label "conduit:failed" "d73a4a" "engine failed; needs attention"
 
 # 7. reviewer can review/approve.
-api PUT /repos/como/conduit-dogfood/collaborators/reviewer \
+api PUT "/repos/como/$REPO_NAME/collaborators/reviewer" \
   '{"permission":"write"}' 204
 
-echo "forge ready: $BASE (org como, repo conduit-dogfood; tokens in .secrets/)"
+echo "forge ready: $BASE (org como, repo $REPO_NAME; tokens in .secrets/)"

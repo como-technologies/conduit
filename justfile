@@ -46,7 +46,7 @@ init-adroit:
 adr-check:
     .conduit/bin/adroit check --dir adr
 
-# Scripted demo trigger: label the demo issue conduit:run as the reviewer
+# Scripted demo trigger: label the demo issue conduit:run as the reviewer (REPO_NAME selects the repo)
 demo-trigger:
     bash demo/demo-trigger.sh
 
@@ -58,7 +58,7 @@ demo:
 conformance:
     cargo test --test conformance
 
-# Throwaway Gitea on localhost:3000 — two users, labels, seeded repo
+# Throwaway Gitea on localhost:3000 — two users, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize the seeding)
 forge-up:
     docker compose -f demo/docker-compose.yml up -d
     bash demo/gitea-init.sh

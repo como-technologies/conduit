@@ -1,6 +1,7 @@
 /target
 /.conduit/
 /.secrets/
+/demo/runs/
 /docs/book
 *.draft
 .env
