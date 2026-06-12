@@ -103,6 +103,12 @@ pub struct IssueSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrSnapshot {
     pub id: PrId,
+    /// PR title as the forge holds it — `conduit verify` asserts the
+    /// tuesday-contract prefix on it (spec §The tuesday contract).
+    pub title: String,
+    /// PR body as the forge holds it — `conduit verify` asserts the
+    /// trailer-as-final-line on it.
+    pub body: String,
     pub head_branch: String,
     pub labels: Vec<String>,
     pub reviews: Vec<Review>,
@@ -400,6 +406,8 @@ mod tests {
     fn pr(id: u64) -> PrSnapshot {
         PrSnapshot {
             id: PrId(id),
+            title: "[ADR-0003] x".into(),
+            body: "b\n\nAdr-Reference: ADR-0003".into(),
             head_branch: "conduit/adr-0003/x".into(),
             labels: vec![],
             reviews: vec![],

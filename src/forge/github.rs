@@ -349,6 +349,8 @@ impl Forge for GitHubForge {
                 .map(str::to_string);
             prs.push(PrSnapshot {
                 id: PrId(number),
+                title: field_str(&raw, "title"),
+                body: field_str(&raw, "body"),
                 head_branch,
                 labels: label_names(&raw),
                 reviews: self.fetch_reviews(number)?,
@@ -505,6 +507,14 @@ impl Forge for GitHubForge {
         )?;
         Ok(())
     }
+}
+
+/// Optional string field, defaulting to "" (a PR with a null body is legal).
+fn field_str(v: &Value, name: &str) -> String {
+    v.get(name)
+        .and_then(|s| s.as_str())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// The `name` of every entry in a response's `labels` array.

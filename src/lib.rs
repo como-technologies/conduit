@@ -14,3 +14,4 @@ pub mod machine;
 pub mod router;
 pub mod store;
 pub mod task;
+pub mod transcript;

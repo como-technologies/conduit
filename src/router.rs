@@ -430,9 +430,11 @@ impl Router<'_> {
         let spec = TaskSpec {
             adr_reference: record.adr_reference.clone(),
             title: record.title.clone(),
-            // The record carries no ADR body; the verbatim plan snapshot is
-            // the engine's implementation context in the spike.
-            adr_body: String::new(),
+            // Decision context captured by `conduit plan` (AdrSource::show →
+            // store sidecar). Missing sidecar (pre-sidecar records, bare test
+            // rigs) degrades to empty — the plan snapshot still carries the
+            // implementation context.
+            adr_body: self.store.load_adr_body(&record.id)?.unwrap_or_default(),
             plan_markdown: plan,
             review_feedback: if record.review_feedback.is_empty() {
                 None

@@ -194,6 +194,8 @@ fn run_disappearance_rule(forge: &conduit::forge::fake::FakeForge) {
 
     let merged_pr = PrSnapshot {
         id: PrId(99),
+        title: "[ADR-0099] disappearance check".into(),
+        body: "body\n\nAdr-Reference: ADR-0099".into(),
         head_branch: "conduit/adr-0099/disappearance-check".into(),
         labels: vec![],
         reviews: vec![],

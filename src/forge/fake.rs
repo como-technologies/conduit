@@ -148,6 +148,8 @@ impl FakeState {
             .filter(|(_, draft, _)| draft.head.starts_with("conduit/"))
             .map(|(id, draft, open)| PrSnapshot {
                 id: *id,
+                title: draft.title.clone(),
+                body: draft.body.clone(),
                 head_branch: draft.head.clone(),
                 labels: draft.labels.clone(),
                 reviews: vec![],

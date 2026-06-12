@@ -40,6 +40,18 @@ init-adroit:
     cargo install --git file:///home/brett/repos/como-tech/adroit --rev $(grep -v '^#' adroit.rev | tail -1) --locked --root .conduit adroit
     .conduit/bin/adroit manifest -o json > /dev/null && echo "adroit handshake OK"
 
+# Scripted demo trigger: label the demo issue conduit:run as the reviewer
+demo-trigger:
+    bash demo/demo-trigger.sh
+
+# The full demo walkthrough is docs/src/usage/demo.md (Task 14)
+demo:
+    @echo "Follow docs/src/usage/demo.md — `just forge-up` first."
+
+# Conformance suite, all legs that need no secrets
+conformance:
+    cargo test --test conformance
+
 # Throwaway Gitea on localhost:3000 — two users, labels, seeded repo
 forge-up:
     docker compose -f demo/docker-compose.yml up -d

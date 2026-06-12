@@ -181,6 +181,32 @@ impl Store {
         }
     }
 
+    // ADR-body sidecar — the decision context `conduit plan` captured from
+    // `AdrSource::show`, persisted next to the plan snapshot so the router can
+    // inline it into TaskSpec.adr_body (spec §The engine seam). A sidecar file
+    // (plans/<task-id>.adr.md), NOT a TaskRecord field: the markdown belongs
+    // with the plan snapshot, and `cat .conduit/tasks/*.json` stays readable.
+
+    pub fn save_adr_body(&self, task_id: &str, markdown: &str) -> Result<(), StoreError> {
+        write_atomic(&self.adr_body_path(task_id), markdown.as_bytes())
+    }
+
+    /// `None` when no sidecar exists — tasks created before the sidecar landed
+    /// (or test rigs that never planned) run with an empty ADR body.
+    pub fn load_adr_body(&self, task_id: &str) -> Result<Option<String>, StoreError> {
+        let path = self.adr_body_path(task_id);
+        match std::fs::read(&path) {
+            Ok(bytes) => String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|e| StoreError::Io {
+                    path: path.clone(),
+                    source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+                }),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(source) => Err(StoreError::Io { path, source }),
+        }
+    }
+
     // Poll cursor — the previous RepoSnapshot per forge, as opaque JSON.
 
     pub fn save_cursor(&self, forge: &str, snapshot: &serde_json::Value) -> Result<(), StoreError> {
@@ -215,6 +241,10 @@ impl Store {
 
     fn plan_path(&self, task_id: &str) -> PathBuf {
         self.root.join("plans").join(format!("{task_id}.md"))
+    }
+
+    fn adr_body_path(&self, task_id: &str) -> PathBuf {
+        self.root.join("plans").join(format!("{task_id}.adr.md"))
     }
 
     fn cursor_path(&self, forge: &str) -> PathBuf {
@@ -343,6 +373,21 @@ mod tests {
             .map(|b| format!("{b:02x}"))
             .collect();
         assert_eq!(sha, want);
+    }
+
+    #[test]
+    fn adr_body_sidecar_round_trips_and_missing_is_none() {
+        let (_d, s) = store();
+        // Missing sidecar is None — records that predate the sidecar (or
+        // tests that never planned) must keep working with an empty body.
+        assert_eq!(s.load_adr_body("adr-0003").unwrap(), None);
+        let body = "## Context\n\nthe decision\n";
+        s.save_adr_body("adr-0003", body).unwrap();
+        assert_eq!(s.load_adr_body("adr-0003").unwrap().as_deref(), Some(body));
+        // Sidecar lives next to the plan snapshot and never shadows it.
+        s.save_plan("adr-0003", "# Plan\n").unwrap();
+        assert_eq!(s.load_plan("adr-0003").unwrap(), "# Plan\n");
+        assert_eq!(s.load_adr_body("adr-0003").unwrap().as_deref(), Some(body));
     }
 
     #[test]

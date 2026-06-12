@@ -2,19 +2,10 @@
 //! a transcript (JSONL) in normalized form and NEVER executed
 //! (spec §Transcript-diff semantics). Synthesized ids keep callers working.
 //!
-//! Normalization rules (the demo's forge-neutrality money shot — both
-//! transcript legs must serialize identically):
-//! - Forge-assigned ids → `$ISSUE_1`/`$PR_1`… placeholders in first-seen
-//!   order. Synthesized ids from mutations AND ids passed back in by the
-//!   caller map through the same table; an id never seen before through a
-//!   mutation gets the next placeholder.
-//! - Timestamps and durations: omitted entirely.
-//! - Effort label VALUES redacted: any label matching `effort:*` →
-//!   `effort:$REDACTED` (transcript-only; real PRs always carry the real
-//!   label — it derives from wall-clock, which would break the diff).
-//! - Repo slug → `$REPO` (replace `{owner}/{repo}` occurrences in bodies).
-//! - Line shape: `{"action":"<kind>", ...}` with stable key order
-//!   (serde_json's default `Map` is a BTreeMap, so keys serialize sorted).
+//! The normalization itself (id placeholders, effort/slug redaction, line
+//! shape) lives in [`crate::transcript`] — defined ONCE, shared with the
+//! demo-transcript emitter so the two legs of the forge-neutrality diff can
+//! never drift apart. See `transcript::normalize_action` for the rules.
 //!
 //! Probe overlay: `find_open_pr_by_head` consults the recorded open PRs
 //! BEFORE delegating to live reads — the open_pr → probe replay round-trip
@@ -25,9 +16,8 @@
 
 use std::sync::Mutex;
 
-use serde_json::{Value, json};
-
 use crate::task::{IssueId, PrId};
+use crate::transcript::{ForgeCall, Redactor, normalize_action};
 
 use super::{Forge, ForgeError, LabelSpec, NewIssue, PrDraft, RepoSnapshot};
 
@@ -40,20 +30,24 @@ const SYNTHETIC_ID_BASE: u64 = 9_000_000_000;
 struct DryRunState {
     /// Normalized transcript, one compact JSON object per line.
     lines: Vec<String>,
-    /// Issue ids in first-seen order: index i ⇒ placeholder `$ISSUE_{i+1}`.
-    issue_ids: Vec<u64>,
-    /// PR ids in first-seen order: index i ⇒ placeholder `$PR_{i+1}`.
-    pr_ids: Vec<u64>,
+    /// Shared normalization state (id placeholder tables + slug redaction).
+    redactor: Redactor,
     /// Probe overlay: (head branch, synthetic id) per recorded open_pr.
     open_prs: Vec<(String, PrId)>,
     next_issue: u64,
     next_pr: u64,
 }
 
+impl DryRunState {
+    /// Normalize one mutation through the SHARED rules and append its line.
+    fn record(&mut self, call: &ForgeCall<'_>) {
+        let line = normalize_action(&mut self.redactor, call).to_string();
+        self.lines.push(line);
+    }
+}
+
 pub struct DryRunForge<F: Forge> {
     inner: F,
-    /// `{owner}/{repo}` to rewrite as `$REPO` in bodies (None = no rewrite).
-    repo_slug: Option<String>,
     state: Mutex<DryRunState>,
 }
 
@@ -61,11 +55,9 @@ impl<F: Forge> DryRunForge<F> {
     pub fn new(inner: F) -> DryRunForge<F> {
         DryRunForge {
             inner,
-            repo_slug: None,
             state: Mutex::new(DryRunState {
                 lines: Vec::new(),
-                issue_ids: Vec::new(),
-                pr_ids: Vec::new(),
+                redactor: Redactor::new(None),
                 open_prs: Vec::new(),
                 next_issue: SYNTHETIC_ID_BASE + 1,
                 next_pr: SYNTHETIC_ID_BASE + 1,
@@ -81,8 +73,8 @@ impl<F: Forge> DryRunForge<F> {
     /// verbatim — transcript neutrality there rests on callers building them
     /// via `contract::*` (which never embeds a repo slug).
     pub fn with_repo_slug(inner: F, slug: &str) -> DryRunForge<F> {
-        let mut d = DryRunForge::new(inner);
-        d.repo_slug = Some(slug.to_string());
+        let d = DryRunForge::new(inner);
+        d.state.lock().expect("DryRunForge lock").redactor = Redactor::new(Some(slug.to_string()));
         d
     }
 
@@ -95,52 +87,6 @@ impl<F: Forge> DryRunForge<F> {
     pub(crate) fn inner_ref_for_tests(&self) -> &F {
         &self.inner
     }
-
-    /// Serialize and append one transcript line. serde_json's default map is
-    /// a BTreeMap, so keys come out alphabetically sorted — stable key order
-    /// without any extra bookkeeping.
-    fn record(&self, state: &mut DryRunState, line: Value) {
-        state.lines.push(line.to_string());
-    }
-
-    /// `$REPO`-redact a free-text field (spec: repo slug never appears in a
-    /// transcript — the two demo legs target different repos).
-    ///
-    /// This is a LITERAL substring replace, not word-boundary aware: a body
-    /// naming `owner/repo-fork` with slug `owner/repo` becomes `$REPO-fork`.
-    /// Acceptable for the spike's generated bodies; don't pass slugs that
-    /// prefix other paths the caller wants preserved.
-    fn redact_text(&self, text: &str) -> String {
-        match &self.repo_slug {
-            Some(slug) => text.replace(slug.as_str(), "$REPO"),
-            None => text.to_string(),
-        }
-    }
-}
-
-/// `effort:*` label VALUES are redacted — they derive from wall-clock, which
-/// must never make two otherwise-identical transcripts differ.
-fn redact_label(label: &str) -> String {
-    if label.starts_with("effort:") {
-        "effort:$REDACTED".to_string()
-    } else {
-        label.to_string()
-    }
-}
-
-fn redact_labels(labels: &[String]) -> Vec<String> {
-    labels.iter().map(|l| redact_label(l)).collect()
-}
-
-/// Placeholder for `id` in `seen` first-seen order; an id never seen before
-/// through a mutation gets the next placeholder (same table for synthesized
-/// ids and ids the caller passed back in).
-fn placeholder(seen: &mut Vec<u64>, prefix: &str, id: u64) -> String {
-    let index = seen.iter().position(|&s| s == id).unwrap_or_else(|| {
-        seen.push(id);
-        seen.len() - 1
-    });
-    format!("${prefix}_{}", index + 1)
 }
 
 impl<F: Forge> Forge for DryRunForge<F> {
@@ -179,37 +125,18 @@ impl<F: Forge> Forge for DryRunForge<F> {
 
     fn ensure_labels(&self, labels: &[LabelSpec]) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let specs: Vec<Value> = labels
-            .iter()
-            .map(|l| {
-                json!({
-                    "color": l.color,
-                    "description": l.description,
-                    "name": redact_label(&l.name),
-                })
-            })
-            .collect();
-        self.record(
-            &mut state,
-            json!({"action": "ensure_labels", "labels": specs}),
-        );
+        state.record(&ForgeCall::EnsureLabels { labels });
         Ok(())
     }
 
     fn create_issue(&self, new: &NewIssue) -> Result<IssueId, ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let id = state.next_issue;
+        let id = IssueId(state.next_issue);
         state.next_issue += 1;
-        // Register the synthetic id now: first-seen order is mutation order.
-        placeholder(&mut state.issue_ids, "ISSUE", id);
-        let line = json!({
-            "action": "create_issue",
-            "body": self.redact_text(&new.body),
-            "labels": redact_labels(&new.labels),
-            "title": new.title,
-        });
-        self.record(&mut state, line);
-        Ok(IssueId(id))
+        // normalize_action registers the synthetic id: first-seen order is
+        // mutation order.
+        state.record(&ForgeCall::CreateIssue { new, id });
+        Ok(id)
     }
 
     fn upsert_issue_comment(
@@ -219,76 +146,48 @@ impl<F: Forge> Forge for DryRunForge<F> {
         body: &str,
     ) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let issue = placeholder(&mut state.issue_ids, "ISSUE", id.0);
-        let line = json!({
-            "action": "upsert_issue_comment",
-            "body": self.redact_text(body),
-            "issue": issue,
-            "marker": marker,
+        state.record(&ForgeCall::UpsertIssueComment {
+            id: *id,
+            marker,
+            body,
         });
-        self.record(&mut state, line);
         Ok(())
     }
 
     fn set_issue_labels(&self, id: &IssueId, labels: &[String]) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let issue = placeholder(&mut state.issue_ids, "ISSUE", id.0);
-        let line = json!({
-            "action": "set_issue_labels",
-            "issue": issue,
-            "labels": redact_labels(labels),
-        });
-        self.record(&mut state, line);
+        state.record(&ForgeCall::SetIssueLabels { id: *id, labels });
         Ok(())
     }
 
     fn close_issue(&self, id: &IssueId) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let issue = placeholder(&mut state.issue_ids, "ISSUE", id.0);
-        self.record(&mut state, json!({"action": "close_issue", "issue": issue}));
+        state.record(&ForgeCall::CloseIssue { id: *id });
         Ok(())
     }
 
     fn open_pr(&self, draft: &PrDraft) -> Result<PrId, ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let id = state.next_pr;
+        let id = PrId(state.next_pr);
         state.next_pr += 1;
-        placeholder(&mut state.pr_ids, "PR", id);
-        state.open_prs.push((draft.head.clone(), PrId(id)));
-        let line = json!({
-            "action": "open_pr",
-            "base": draft.base,
-            "body": self.redact_text(&draft.body),
-            "head": draft.head,
-            "labels": redact_labels(&draft.labels),
-            "title": draft.title,
-        });
-        self.record(&mut state, line);
-        Ok(PrId(id))
+        state.open_prs.push((draft.head.clone(), id));
+        state.record(&ForgeCall::OpenPr { draft, id });
+        Ok(id)
     }
 
     fn upsert_pr_comment(&self, id: &PrId, marker: &str, body: &str) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let pr = placeholder(&mut state.pr_ids, "PR", id.0);
-        let line = json!({
-            "action": "upsert_pr_comment",
-            "body": self.redact_text(body),
-            "marker": marker,
-            "pr": pr,
+        state.record(&ForgeCall::UpsertPrComment {
+            id: *id,
+            marker,
+            body,
         });
-        self.record(&mut state, line);
         Ok(())
     }
 
     fn set_pr_labels(&self, id: &PrId, labels: &[String]) -> Result<(), ForgeError> {
         let mut state = self.state.lock().expect("DryRunForge lock");
-        let pr = placeholder(&mut state.pr_ids, "PR", id.0);
-        let line = json!({
-            "action": "set_pr_labels",
-            "labels": redact_labels(labels),
-            "pr": pr,
-        });
-        self.record(&mut state, line);
+        state.record(&ForgeCall::SetPrLabels { id: *id, labels });
         Ok(())
     }
 }

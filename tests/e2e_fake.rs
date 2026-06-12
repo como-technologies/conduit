@@ -204,6 +204,8 @@ impl Rig {
         }
         cur.prs.push(PrSnapshot {
             id: pr,
+            title: contract::pr_title(&record.adr_reference, &record.title),
+            body: contract::pr_body(&record.adr_reference, PLAN_MD.trim_end()),
             head_branch: record.branch.clone(),
             labels: vec![],
             reviews: vec![],

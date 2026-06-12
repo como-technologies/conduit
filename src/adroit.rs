@@ -78,6 +78,20 @@ pub struct AdrSource {
 }
 
 impl AdrSource {
+    /// Resolve the adroit binary path: the `CONDUIT_ADROIT_BIN` env override
+    /// (documented test seam — CLI tests point it at a stub), else the pinned
+    /// install at `<repo_root>/.conduit/bin/adroit` (`just init-adroit`).
+    ///
+    /// BOTH the override and the default path literal live here, in
+    /// src/adroit.rs only — callers (cli.rs) never name the binary path, which
+    /// is what keeps the crate-wide `bin/adroit` source-walker test honest.
+    pub fn resolve_bin(repo_root: &std::path::Path) -> PathBuf {
+        match std::env::var("CONDUIT_ADROIT_BIN") {
+            Ok(p) if !p.is_empty() => PathBuf::from(p),
+            _ => repo_root.join(".conduit/bin/adroit"),
+        }
+    }
+
     pub fn new(bin: PathBuf, dir: PathBuf, cfg: &crate::config::AdroitConfig) -> AdrSource {
         let mut ai_env = vec![
             ("ADROIT_AI_PROVIDER".to_string(), cfg.ai_provider.clone()),
@@ -252,6 +266,18 @@ mod tests {
             dir.to_path_buf(),
             &AdroitConfig::default(),
         )
+    }
+
+    #[test]
+    fn resolve_bin_defaults_under_the_repo_root() {
+        // Env-override wins is covered at the CLI level (tests/cli.rs sets
+        // CONDUIT_ADROIT_BIN on the child process; set_var here would race
+        // parallel tests). Assert the default only when the env is absent.
+        if std::env::var("CONDUIT_ADROIT_BIN").is_ok() {
+            return;
+        }
+        let bin = AdrSource::resolve_bin(std::path::Path::new("/repo"));
+        assert_eq!(bin, std::path::Path::new("/repo/.conduit/bin/adroit"));
     }
 
     #[test]
