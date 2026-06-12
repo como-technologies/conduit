@@ -60,8 +60,11 @@ pub enum Action {
 /// table tests cover it).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FeedbackOp {
+    /// Leave `TaskRecord.review_feedback` unchanged.
     Keep,
+    /// Push the body onto `TaskRecord.review_feedback` (current round).
     Append(String),
+    /// Reset `TaskRecord.review_feedback` to empty (a round completed).
     Clear,
 }
 
@@ -93,6 +96,9 @@ pub fn step(record: &TaskRecord, event: &Event) -> Transition {
         return ignore();
     }
     // Terminal PR events: must-act from ANY non-terminal state with an open PR.
+    // INVARIANT: every arm in this block MUST carry `if record.pr.is_some()`.
+    // Without that guard a new event here would act from all non-terminal
+    // states (wrong); the pr=None case must fall through to the tuple match.
     match event {
         Event::PrMerged { merge_sha } if record.pr.is_some() => {
             let mut actions = Vec::new();
