@@ -22,7 +22,8 @@ time = { version = "0.3", features = ["serde-human-readable", "formatting", "par
 # conduit.toml config (not in the spec dep list, required by §Module layout src/config.rs).
 toml = "1"
 # Blocking HTTP (rustls) — only ever called through the HttpTransport seam.
-ureq = "3"
+# `json` gates send_json/into_json, the surface the forge adapters speak.
+ureq = { version = "3", features = ["json"] }
 
 [dev-dependencies]
 assert_cmd = "2"
