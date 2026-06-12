@@ -5,4 +5,5 @@
 
 pub mod contract;
 pub mod machine;
+pub mod store;
 pub mod task;
