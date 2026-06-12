@@ -6,6 +6,7 @@
 pub mod cli;
 pub mod config;
 pub mod contract;
+pub mod forge;
 pub mod machine;
 pub mod store;
 pub mod task;
