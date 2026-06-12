@@ -1,0 +1,363 @@
+REHEARSAL 2 — live ollama lanes (beat 2 + beat 3) and the crash/restart sub-beat (2026-06-12)
+Host: WSL2 linux, ollama llama3.2 local; fresh forge + workdir (demo-down ran between rehearsals).
+Sequence: demo-up, beat-1, beat-2 --live, beat-3 --live, beat-4 --restart, beat-5, demo-down.
+Clock note: the WALL-CLOCK lines use the realtime clock; the assessments binary's own
+internal elapsed marks (monotonic) read ~23s longer in beat 2 — WSL2 realtime drift,
+both numbers preserved below.
+
+================================================================
+==== demo-up
+================================================================
+────────────────────────────────────────────────────────────────────
+ DEMO-UP  (stand up the whole engagement demo)
+────────────────────────────────────────────────────────────────────
+[1/6] resolving cross-repo dependencies
+kit: playbook -> ../playbook (sibling checkout)
+kit: pulse -> ../pulse (sibling checkout)
+kit: assessments -> ../assessments (sibling checkout)
+kit: tuesday -> ../tuesday (sibling checkout)
+[2/6] building conduit + installing the pinned adroit
+init-adroit: pinned rev b57550efe41c55feb4d4ab005a5c208549955a27 already installed — skipping install
+adroit handshake OK
+[3/6] building sibling binaries (only what resolved; incremental)
+[4/6] forge
+docker compose -f demo/docker-compose.yml up -d
+ Network demo_default Creating 
+ Network demo_default Created 
+ Volume demo_gitea-data Creating 
+ Volume demo_gitea-data Created 
+ Container conduit-gitea Creating 
+ Container conduit-gitea Created 
+ Container conduit-gitea Starting 
+ Container conduit-gitea Started 
+bash demo/gitea-init.sh
+waiting for gitea at http://localhost:3000 ...
+gitea is up
+created user conduit-bot
+created user reviewer
+minted token for conduit-bot -> .secrets/conduit-bot.token
+minted token for reviewer -> .secrets/reviewer.token
+remote: . Processing 1 references        
+remote: Processed 1 references in total        
+To http://localhost:3000/como/playbook.git
+ * [new branch]      main -> main
+forge ready: http://localhost:3000 (org como, repo playbook; tokens in .secrets/)
+[5/6] per-run workdir
+demo workdir ready: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z (adroit corpus: /home/brett/repos/como-tech/playbook/src/adrs)
+initialized: store at /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/.conduit — label set ensured on gitea como/playbook at http://localhost:3000
+[6/6] live-lane check (ollama)
+kit: ollama 'llama3.2' is up and pre-warmed — --live variants available
+
+ WALL-CLOCK: demo-up took 6s
+
+────────────────────────────────────────────────────────────────────
+ THE BEAT MENU  (run from anywhere; each beat prints its own evidence)
+────────────────────────────────────────────────────────────────────
+ demo/kit/beat-1-measure-prior      Measure (prior): pulse's verified-anonymous team signal
+ demo/kit/beat-2-assess [--live]    Assess: brief + signals -> schema-valid assessment
+ demo/kit/beat-3-prescribe [--live] Prescribe: assessment -> ADRs; accept; stored plan
+ demo/kit/beat-4-adopt [--restart]  Adopt: stored plan -> human-gated PR -> merged -> verify 6/6
+ demo/kit/beat-5-measure            Measure: tuesday --strict + Adopt<->Measure cross-check
+ demo/kit/demo-down                 Tear down: forge destroyed, workdir removed, nothing left
+
+ Pre-baked beats run in seconds. --live recomputes on local ollama
+ (llama3.2): expect ~6 min for beat 2, ~5-6 min for beat 3.
+ Workdir: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z
+
+================================================================
+==== beat-1
+================================================================
+────────────────────────────────────────────────────────────────────
+ BEAT 1 — MEASURE THE PRIOR PERIOD  (pulse, seeded + deterministic)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   Before Como prescribes anything, we measure. pulse collects the team's
+   sentiment with cryptographic anonymity — k-anonymity suppression is
+   tested on both sides of the threshold, so nobody's answer is ever
+   identifiable. The demo runs the seeded simulation: same seed, byte-for-
+   byte identical report. Determinism is designed in, not hoped for —
+   watch us prove it by running it twice.
+
+kit: pulse -> ../pulse (sibling checkout)
+ RUN: just dogfood   (in the pulse repo — twice, to prove determinism)
+
+ EVIDENCE — determinism (two runs, same seed):
+   run 1 sha256: a3e94c63d52b825febf4e17249eb299bbb4d171f10b40abdcd66b3d0f3283e1c
+   run 2 sha256: a3e94c63d52b825febf4e17249eb299bbb4d171f10b40abdcd66b3d0f3283e1c
+   BYTE-IDENTICAL: yes
+
+ EVIDENCE — the Measure artifact (pulse.measure-report/v1):
+   schema pulse.measure-report/v1  seed 42  flows 10/10 passed, 0 failed
+   signal: "How confident are you that this iteration's changes improved the portfolio?" -> avg 4.2 (10 unique pseudonyms, suppressed: false)
+   signal: "How well did the dogfood loop (prescribe, adopt, measure, assess) support the work this iteration?" -> avg 2.6 (10 unique pseudonyms, suppressed: false)
+   signal: "How sustainable is the current iteration pace?" -> avg 3.9 (10 unique pseudonyms, suppressed: false)
+
+ -> artifact for beat 2: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/pulse-report.json
+
+ WALL-CLOCK: beat-1-measure-prior took 0s
+
+================================================================
+==== beat-2-live
+================================================================
+────────────────────────────────────────────────────────────────────
+ BEAT 2 — ASSESS  (LIVE on local ollama)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   An assessment that used to take a consultant weeks is authored in minutes
+   from the client's own brief — on a 3B model running on this laptop. The
+   output is not slideware: it is schema-validated YAML with mechanical
+   quality gates (degeneracy, dedupe, leakage). The prior period's pulse
+   signals ride along as background context — the loop's return edge.
+   And the human gate: the client's architect reviews every question before
+   it is ever asked.
+
+kit: assessments -> ../assessments (sibling checkout)
+ RUN: assessments author --brief <client brief> --context <pulse report> --out assessment.yaml
+      (AI_PROVIDER=ollama, model llama3.2 — local only; this is the slow lane, ~6 min)
+[   0.0s] scoping summary...
+[  17.6s] generating structure...
+[  63.3s] structure 'Software Engineering Maturity Assessment': 4 domains, 8 practices
+[  63.3s] questions 1/8: Automate Build and Deployment Processes...
+[  94.2s]   -> 12 questions
+[  94.2s] questions 2/8: Implement Continuous Integration and Testing...
+[ 127.2s]   -> 12 questions
+[ 127.2s] questions 3/8: Adhere to Coding Standards and Best Practices...
+[ 160.0s]   -> 13 questions
+[ 160.0s] questions 4/8: Use Code Reviews and Pair Programming...
+[ 193.5s] questions 4/8: Use Code Reviews and Pair Programming (attempt 2)...
+[ 204.9s]   -> 4 questions
+[ 204.9s] questions 5/8: Implement Unit Testing and Integration Testing...
+[ 241.7s]   -> 12 questions
+[ 241.7s] questions 6/8: Use Automated Testing Tools and Frameworks...
+[ 276.3s]   -> 12 questions
+[ 276.3s] questions 7/8: Implement Monitoring and Alerting Systems...
+[ 311.5s]   -> 12 questions
+[ 311.5s] questions 8/8: Develop a Maintenance and Support Plan...
+[ 343.6s]   -> 12 questions
+authored 'Software Engineering Maturity Assessment' in 343.6s — 4 domains, 8 practices, 89 questions -> /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/assessment.yaml
+
+ EVIDENCE — schema validation (live, exit code is the gate):
+   valid: 'Software Engineering Maturity Assessment' — 4 domains, 8 practices, 89 questions
+   exit code: 0
+
+ EVIDENCE — shape (validate -o json):
+   Software Engineering Maturity Assessment — 4 domains, 8 practices, 89 questions
+   - Code Quality: Adhere to Coding Standards and Best Practices, Use Code Reviews and Pair Programming
+   - Delivery Pipeline: Automate Build and Deployment Processes, Implement Continuous Integration and Testing
+   - Operations: Implement Monitoring and Alerting Systems, Develop a Maintenance and Support Plan
+   - Testing: Implement Unit Testing and Integration Testing, Use Automated Testing Tools and Frameworks
+
+ -> artifact for beat 3: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/assessment.yaml
+
+ WALL-CLOCK: beat-2-assess (--live) took 321s
+
+================================================================
+==== beat-3-live
+================================================================
+────────────────────────────────────────────────────────────────────
+ BEAT 3 — PRESCRIBE  (LIVE on local ollama)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   Findings become decisions. adroit ingests the assessment and seeds one
+   proposed ADR per practice — a governed, machine-readable decision corpus,
+   not a slide deck. The human gate: nothing is prescribed until the
+   client's architect moves a decision to Accepted. Then the key trick —
+   each accepted decision carries a STORED implementation plan inside the
+   document itself. We pay AI once, at authoring time; every read after
+   that is deterministic and provider-free. Watch the same plan come back
+   sha-identical with no AI configured at all.
+
+kit: playbook -> ../playbook (sibling checkout)
+ RUN: adroit import --from-assessment assessment.yaml --ai   (flesh-out on llama3.2 — the slow lane)
+Fleshing out ADR-0001 via ollama:llama3.2 (~896 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0002 via ollama:llama3.2 (~937 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0003 via ollama:llama3.2 (~985 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0004 via ollama:llama3.2 (~839 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0005 via ollama:llama3.2 (~1038 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0006 via ollama:llama3.2 (~1051 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0007 via ollama:llama3.2 (~1017 input tokens, up to 1800 generated — estimate) …
+Fleshing out ADR-0008 via ollama:llama3.2 (~1058 input tokens, up to 1800 generated — estimate) …
+Seeded 8 proposed ADR(s) from assessment "Software Engineering Maturity Assessment".
+
+ EVIDENCE — seeded decisions (import -o json):
+   seeded 8 proposed ADR(s), 0 skipped (dedupe guard)
+   ADR-0001  Automate Build and Deployment Processes  [Proposed]
+   ADR-0002  Implement Continuous Integration and Testing  [Proposed]
+   ADR-0003  Adhere to Coding Standards and Best Practices  [Proposed]
+   ADR-0004  Use Code Reviews and Pair Programming  [Proposed]
+   ADR-0005  Implement Unit Testing and Integration Testing  [Proposed]
+   ADR-0006  Use Automated Testing Tools and Frameworks  [Proposed]
+   ADR-0007  Implement Monitoring and Alerting Systems  [Proposed]
+   ADR-0008  Develop a Maintenance and Support Plan  [Proposed]
+
+ RUN: adroit set-status 1 accepted   (the human gate — the architect accepts the decision)
+   Updated ADR-0001 status to Accepted (/home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/prescribe/adrs/accepted/0001-automate-build-and-deployment-processes.md)
+
+ RUN: adroit plan 1 --save   (generate on llama3.2 and persist INTO the ADR document)
+Planning ADR-0001 via ollama:llama3.2 (~1136 input tokens, up to 1800 generated — estimate) …
+
+ RUN: adroit plan 1 -o json   — twice, with NO AI environment at all
+      (corpus: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/prescribe/adrs; plan generated seconds ago, persisted into the document)
+
+ EVIDENCE — stored-plan determinism (provider-free double read):
+   ADR-0001: stored = true
+   read 1 sha256: 564918cffdd90b45a0eaa2adece0bd1e49571234cd5b8f757f8768ec8b7ca85a
+   read 2 sha256: 564918cffdd90b45a0eaa2adece0bd1e49571234cd5b8f757f8768ec8b7ca85a
+   SHA-IDENTICAL: yes — no AI was configured for either read
+
+ EVIDENCE — corpus validity (adroit check):
+   scratch corpus: no problems
+
+ -> artifact for beat 4: the client corpus's accepted decision + stored plan
+    (/home/brett/repos/como-tech/playbook/src/adrs/accepted/, already seeded onto the demo forge)
+
+ WALL-CLOCK: beat-3-prescribe (--live) took 296s
+
+================================================================
+==== beat-4-restart
+================================================================
+────────────────────────────────────────────────────────────────────
+ BEAT 4 — ADOPT  (the human-gated agent lifecycle + crash/restart)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   This is the flagship. conduit takes the accepted decision's STORED plan —
+   no AI at runtime — and posts it as an issue on the client's own forge.
+   Then it stops. Three human gates, by name: nothing runs until a reviewer
+   labels the issue conduit:run (the scope gate); every change arrives as a
+   pull request under the client's own review tooling (the review gate); and
+   only a human can merge — conduit has no merge method, the gate is
+   unrepresentable in its type system (the merge gate). You never have to
+   trust an agent; you review a pull request, which your team already knows
+   how to do. And when it's merged, we don't claim success — we machine-
+   verify it: six contract checks against the live forge.
+
+ RUN: conduit plan 5   (stored plan -> forge issue; NO AI environment)
+   plan for ADR-0005: stored plan (deterministic read from the ADR document)
+   conduit: auto-creating missing label "adr:ADR-0005" (neutral grey) — add it to ensure_labels if this is a standing label
+   planned ADR-0005 as task adr-0005 — issue 1 on gitea como/playbook at http://localhost:3000: label it conduit:run to start
+
+ RUN: the reviewer labels the issue conduit:run   (the SCOPE gate — in real life: the forge UI)
+bash demo/demo-trigger.sh
+   labeled issue 1 with conduit:run (as reviewer)
+
+ SUB-BEAT: crash mid-Coding (kill -9), then recover with zero duplicate forge actions
+ RUN: CONDUIT_FAKE_ENGINE_MODE=hang:300 conduit run --once   (engine hangs; we kill the harness)
+conduit run: single tick via gitea como/playbook at http://localhost:3000 (engine: fake (hang 300s))
+
+ EVIDENCE — the crash record on disk (write-ahead intent NOT done):
+   state: Coding | pending: RunEngine done=false
+
+ RUN: conduit run --once   (recovery: fresh workspace, resumes from the immutable plan snapshot)
+   conduit run: single tick via gitea como/playbook at http://localhost:3000 (engine: fake (complete))
+
+ EVIDENCE — duplicate audit against the live forge:
+   issues carrying the adr-0005 task marker: [1] (want exactly one)
+   PRs with head conduit/adr-0005/*:          [2] (want exactly one)
+
+ EVIDENCE — the pull request on the client's forge (the REVIEW gate now holds):
+   PR 2: [ADR-0005] Automated Testing
+   labels: adr:ADR-0005, effort:1-super-quick
+   head: conduit/adr-0005/automated-testing
+   state: open, merged: false
+
+ RUN: the reviewer approves and merges PR 2   (the MERGE gate — conduit cannot do this)
+   review APPROVED: HTTP 200
+   merge: HTTP 200
+
+ RUN: conduit run --once   (observes PrMerged -> Merged, closes the issue with the merge sha)
+   conduit run: single tick via gitea como/playbook at http://localhost:3000 (engine: fake (complete))
+   id                                    state             attempt   branch
+   adr-0005                              Merged            1         conduit/adr-0005/automated-testing
+
+ RUN: conduit verify 5 -o json   (six machine checks on the MERGED PR — no slideware)
+
+ EVIDENCE — the tuesday contract, 6/6 (exit 0):
+   PASS  title_prefix
+   PASS  trailer_final_line
+   PASS  exactly_one_effort_label
+   PASS  adr_label_present
+   PASS  branch_shape
+   PASS  never_adr_namespace
+   overall: pass=true  pr=2  task=adr-0005
+
+ RUN: conduit demo-transcript 5 --forge gitea|github + diff   (the forge-neutrality money shot)
+
+ EVIDENCE — normalized action transcripts, gitea (live) vs github (DryRun):
+   FORGE-NEUTRAL: identical (7 lines)
+   9cf0b8d8b50ecba838b288994b0af45d2270be82c457d185ac4f365b25fc7a6e  /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/t-gitea.jsonl
+   9cf0b8d8b50ecba838b288994b0af45d2270be82c457d185ac4f365b25fc7a6e  /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/t-github.jsonl
+
+ -> artifact for beat 5: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/conduit-verify.json (+ the merged PR on the forge)
+
+ WALL-CLOCK: beat-4-adopt (--restart) took 5s
+
+================================================================
+==== beat-5
+================================================================
+────────────────────────────────────────────────────────────────────
+ BEAT 5 — MEASURE  (tuesday --strict + the Adopt<->Measure cross-check)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   Adoption you can count, not activity you take on faith. tuesday reads the
+   merged PRs off the client's forge and rolls measured hours up per
+   decision — strict mode exits nonzero if even one merged PR is
+   unaccounted for. Then the double-entry bookkeeping: conduit's verify and
+   tuesday's report are two independent codebases, and the cross-check
+   asserts they agree on the same PR, the same effort label, the same
+   decision. Finally, the loop closes: this report plus the pulse signal
+   feed the next assessment — which is where this demo began.
+
+kit: tuesday -> ../tuesday (sibling checkout)
+ RUN: tuesday-report --source gitea --owner como --repo playbook --monthly-hours 160 -o json --strict
+      (= tuesday's own `just dogfood-report playbook`; token rides the env, never argv or git)
+   exit code: 0 (strict mode satisfied)
+
+ EVIDENCE — decision-attributed effort (the Measure artifact):
+   como 2026-June: 1 allocation(s), 0 unallocated PR(s) [strict requires 0]
+   PR 2 "[ADR-0005] Automated Testing" -> ADR-0005 (SuperQuick, 160.0h)
+   adr_totals: ADR-0005 = 160.0h
+
+ RUN: cross-check (Adopt vs Measure — two codebases, one ground truth)
+   pr:     conduit=2 tuesday=2
+   effort: conduit=effort:1-super-quick tuesday=effort:1-super-quick (SuperQuick)
+   adr:    conduit=ADR-0005 tuesday=ADR-0005 (adr_totals: 160.0h)
+   CROSS-CHECK PASS: PR 2, effort:1-super-quick, ADR-0005 — Adopt and Measure agree
+
+ EVIDENCE — the closed loop:
+   next-period inputs ready: /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/tuesday-report.json + /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z/pulse-report.json
+   (beat 2 --live consumes them as --context — measurement steers the next assessment)
+
+ WALL-CLOCK: beat-5-measure took 0s
+
+================================================================
+==== demo-down
+================================================================
+────────────────────────────────────────────────────────────────────
+ DEMO-DOWN  (tear down; nothing left)
+────────────────────────────────────────────────────────────────────
+ TALKING POINT:
+   The whole engagement ran on a throwaway forge on this machine. Tear-down
+   destroys the container and its volume; the per-run workdir goes with it.
+   Nothing was ever pushed anywhere but localhost — the client's real
+   infrastructure was never in the blast radius.
+
+ RUN: just forge-down   (container + volume destroyed)
+   docker compose -f demo/docker-compose.yml down -v
+    Container conduit-gitea Stopping 
+    Container conduit-gitea Stopped 
+    Container conduit-gitea Removing 
+    Container conduit-gitea Removed 
+    Volume demo_gitea-data Removing 
+    Network demo_default Removing 
+    Volume demo_gitea-data Removed 
+    Network demo_default Removed 
+   removed workdir /home/brett/repos/como-tech/conduit/demo/runs/kit-20260612T153429Z
+
+ EVIDENCE — nothing left:
+   forge container: gone
+   forge volume: gone
+   workdir: gone
+   remotes touched: none (localhost was the only push target, ever)
+
+ WALL-CLOCK: demo-down took 2s
+
