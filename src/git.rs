@@ -181,6 +181,13 @@ pub fn push(ws: &Path, remote_url: &str, branch: &str) -> Result<(), GitError> {
     Ok(())
 }
 
+/// `git rev-parse HEAD` in `ws` — the local side of the push replay probe
+/// (router compares it against [`ls_remote_sha`]; equal ⇒ already pushed).
+pub fn head_sha(ws: &Path) -> Result<String, GitError> {
+    let out = run_git_ok(Some(ws), &[], &["rev-parse", "HEAD"])?;
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
 /// `git ls-remote <url> refs/heads/<branch>` -> Some(sha) — the push replay probe.
 pub fn ls_remote_sha(remote_url: &str, branch: &str) -> Result<Option<String>, GitError> {
     let out = run_git_ok(
@@ -330,8 +337,11 @@ mod tests {
         // push to the local bare remote; ls-remote sees the branch (the probe)
         assert!(ls_remote_sha(&url, "conduit/adr-0003/x").unwrap().is_none());
         push(&ws, &url, "conduit/adr-0003/x").unwrap();
-        assert!(ls_remote_sha(&url, "conduit/adr-0003/x").unwrap().is_some());
-        // replay probe semantics: same sha -> push skippable by caller
+        // replay probe semantics: remote sha == local HEAD -> push skippable
+        assert_eq!(
+            ls_remote_sha(&url, "conduit/adr-0003/x").unwrap().unwrap(),
+            head_sha(&ws).unwrap()
+        );
     }
 
     #[test]

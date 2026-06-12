@@ -79,6 +79,9 @@ struct FakeState {
     next_pr: u64,
     /// Configurable git remote URL (default "/dev/null/fake.git").
     remote_url: String,
+    /// Single-shot fault injection: the named mutator fails ONCE with a 500,
+    /// then the slot clears (Task 12 cursor-ordering test).
+    fail_next: Option<String>,
 }
 
 impl FakeState {
@@ -95,7 +98,22 @@ impl FakeState {
             next_issue: 1,
             next_pr: 1,
             remote_url: "/dev/null/fake.git".into(),
+            fail_next: None,
         }
+    }
+
+    /// Consume the single-shot fault if it names `method`: error once, then
+    /// succeed forever after. Failed calls are NOT recorded — the effect
+    /// never happened.
+    fn check_fail(&mut self, method: &str) -> Result<(), ForgeError> {
+        if self.fail_next.as_deref() == Some(method) {
+            self.fail_next = None;
+            return Err(ForgeError::Api {
+                status: 500,
+                message: format!("injected failure: {method}"),
+            });
+        }
+        Ok(())
     }
 
     /// Derive a normalized snapshot from stored in-memory state.
@@ -202,6 +220,26 @@ impl FakeForge {
     pub fn set_remote_url(&self, url: &str) {
         self.state.lock().expect("FakeForge lock").remote_url = url.to_string();
     }
+
+    /// Arm single-shot fault injection: the NEXT call to the named mutator
+    /// (e.g. `"open_pr"`) fails with a 500, then the slot clears. Drives the
+    /// cursor-ordering e2e (a failed action must leave the cursor unadvanced).
+    pub fn fail_next(&self, method: &str) {
+        self.state.lock().expect("FakeForge lock").fail_next = Some(method.to_string());
+    }
+
+    /// Stored comments on one issue as `(marker, body)` pairs — the
+    /// exactly-once-effect assertion surface for marker-upsert replay.
+    pub fn issue_comments(&self, id: &IssueId) -> Vec<(String, String)> {
+        self.state
+            .lock()
+            .expect("FakeForge lock")
+            .issue_comments
+            .iter()
+            .filter(|(cid, _, _)| cid == id)
+            .map(|(_, marker, body)| (marker.clone(), body.clone()))
+            .collect()
+    }
 }
 
 impl Forge for FakeForge {
@@ -271,6 +309,7 @@ impl Forge for FakeForge {
 
     fn ensure_labels(&self, labels: &[LabelSpec]) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("ensure_labels")?;
         // Union by name.
         for label in labels {
             if !s.labels.iter().any(|l| l.name == label.name) {
@@ -284,6 +323,7 @@ impl Forge for FakeForge {
 
     fn create_issue(&self, new: &NewIssue) -> Result<IssueId, ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("create_issue")?;
         let id = IssueId(s.next_issue);
         s.next_issue += 1;
         s.issues.push((id, new.clone(), false));
@@ -301,6 +341,7 @@ impl Forge for FakeForge {
         body: &str,
     ) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("upsert_issue_comment")?;
         let action = RecordedAction::UpsertIssueComment {
             id: *id,
             marker: marker.to_string(),
@@ -324,6 +365,7 @@ impl Forge for FakeForge {
     /// Stores the absolute label set (convergent).
     fn set_issue_labels(&self, id: &IssueId, labels: &[String]) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("set_issue_labels")?;
         // Update the stored issue's label list.
         if let Some(entry) = s.issues.iter_mut().find(|(iid, _, _)| *iid == *id) {
             entry.1.labels = labels.to_vec();
@@ -337,6 +379,7 @@ impl Forge for FakeForge {
 
     fn close_issue(&self, id: &IssueId) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("close_issue")?;
         let entry = s.issues.iter_mut().find(|(iid, _, _)| *iid == *id);
         match entry {
             Some(e) => {
@@ -353,6 +396,7 @@ impl Forge for FakeForge {
 
     fn open_pr(&self, draft: &PrDraft) -> Result<PrId, ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("open_pr")?;
         let id = PrId(s.next_pr);
         s.next_pr += 1;
         s.prs.push((id, draft.clone(), true));
@@ -363,6 +407,7 @@ impl Forge for FakeForge {
     /// Replaces an existing PR comment with the same marker, else appends.
     fn upsert_pr_comment(&self, id: &PrId, marker: &str, body: &str) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("upsert_pr_comment")?;
         let action = RecordedAction::UpsertPrComment {
             id: *id,
             marker: marker.to_string(),
@@ -385,6 +430,7 @@ impl Forge for FakeForge {
     /// Stores the absolute label set for the PR (convergent).
     fn set_pr_labels(&self, id: &PrId, labels: &[String]) -> Result<(), ForgeError> {
         let mut s = self.state.lock().expect("FakeForge lock");
+        s.check_fail("set_pr_labels")?;
         if let Some(entry) = s.prs.iter_mut().find(|(pid, _, _)| *pid == *id) {
             entry.1.labels = labels.to_vec();
         }
