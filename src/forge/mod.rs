@@ -20,6 +20,17 @@
 //! - Within-poll flaps (state that appears and reverts between two snapshots,
 //!   e.g. a review submitted then dismissed) are invisible by design
 //!   (spec §Review identity).
+//!
+//! Disappearance rule (adapter obligation):
+//! A PR or issue present in `prev` but ABSENT from `next` produces no events.
+//! Adapters MUST therefore keep merged/closed PRs and closed issues in the
+//! snapshot until their terminal events have been observed (i.e. never fetch
+//! only state=open); a merged PR that vanishes from the snapshot loses its
+//! `PrMerged` forever and wedges the task. The conformance suite asserts this
+//! adapter obligation.
+//!
+//! Note: `IssueSnapshot.closed` is carried for adapters/probes but is not read
+//! by `diff()` — no issue-closed event exists by design.
 
 use std::collections::HashMap;
 
@@ -506,6 +517,109 @@ mod tests {
         p.closed = true;
         p.merge_sha = Some("cafe42".into());
         assert!(diff(&snap(vec![], vec![p.clone()]), &snap(vec![], vec![p])).is_empty());
+    }
+
+    // -- fresh-cursor / full-replay cases --
+
+    /// Lost/fresh-cursor case: cursor file gone → first tick sees everything as
+    /// new. A PR absent from `prev` that already shows merged=true (and a
+    /// merge_sha) MUST fire exactly one PrMerged — it must not be swallowed.
+    #[test]
+    fn pr_absent_from_prev_appearing_merged_fires_pr_merged() {
+        let mut next_pr = pr(7);
+        next_pr.merged = true;
+        next_pr.closed = true;
+        next_pr.merge_sha = Some("abc123".into());
+        let events = diff(&snap(vec![], vec![]), &snap(vec![], vec![next_pr]));
+        assert_eq!(
+            events,
+            vec![ForgeEvent::PrMerged {
+                pr: PrId(7),
+                merge_sha: "abc123".into()
+            }]
+        );
+    }
+
+    /// PR-side analog of `new_issue_fires_all_its_labels`: a PR absent from
+    /// `prev` fires `ReviewSubmitted` for ALL reviews it carries in `next`.
+    #[test]
+    fn pr_absent_from_prev_fires_all_its_reviews() {
+        let mut next_pr = pr(7);
+        next_pr.reviews = vec![
+            review("r1", ReviewVerdict::ChangesRequested, "first pass"),
+            review("r2", ReviewVerdict::Approved, "lgtm"),
+        ];
+        let events = diff(&snap(vec![], vec![]), &snap(vec![], vec![next_pr]));
+        assert_eq!(events.len(), 2);
+        let ids: Vec<&ReviewId> = events
+            .iter()
+            .map(|e| {
+                let ForgeEvent::ReviewSubmitted { review, .. } = e else {
+                    panic!("expected ReviewSubmitted, got {e:?}")
+                };
+                &review.id
+            })
+            .collect();
+        assert_eq!(ids, vec![&ReviewId("r1".into()), &ReviewId("r2".into())]);
+    }
+
+    /// Deterministic event ordering: issues (in `next` order) first, then per
+    /// PR in `next` order — within each PR: ReviewSubmitted (snapshot order),
+    /// CiChanged, then PrMerged/PrClosed.
+    #[test]
+    fn event_order_is_deterministic_issues_then_per_pr() {
+        // Issue 1 gets a new label.
+        let prev_issue = issue(1, &["adr:ADR-0003"]);
+        let next_issue = issue(1, &["adr:ADR-0003", "conduit:run"]);
+
+        // PR 10: two new reviews + CI transition — appears in both prev/next.
+        let mut prev_pr10 = pr(10);
+        prev_pr10.ci = CiState::Pending;
+        let mut next_pr10 = pr(10);
+        next_pr10.ci = CiState::Success;
+        next_pr10.reviews = vec![
+            review("r1", ReviewVerdict::ChangesRequested, "nit"),
+            review("r2", ReviewVerdict::Approved, "lgtm"),
+        ];
+
+        // PR 20: absent from prev, appears merged — fires PrMerged.
+        let mut next_pr20 = pr(20);
+        next_pr20.merged = true;
+        next_pr20.closed = true;
+        next_pr20.merge_sha = Some("deadbeef".into());
+
+        let prev = snap(vec![prev_issue], vec![prev_pr10]);
+        let next = snap(vec![next_issue], vec![next_pr10, next_pr20]);
+        let events = diff(&prev, &next);
+
+        assert_eq!(
+            events,
+            vec![
+                // issues first
+                ForgeEvent::IssueLabeled {
+                    issue: IssueId(1),
+                    label: "conduit:run".into()
+                },
+                // PR 10: reviews in snapshot order, then CiChanged
+                ForgeEvent::ReviewSubmitted {
+                    pr: PrId(10),
+                    review: review("r1", ReviewVerdict::ChangesRequested, "nit"),
+                },
+                ForgeEvent::ReviewSubmitted {
+                    pr: PrId(10),
+                    review: review("r2", ReviewVerdict::Approved, "lgtm"),
+                },
+                ForgeEvent::CiChanged {
+                    pr: PrId(10),
+                    state: CiState::Success
+                },
+                // PR 20: PrMerged
+                ForgeEvent::PrMerged {
+                    pr: PrId(20),
+                    merge_sha: "deadbeef".into()
+                },
+            ]
+        );
     }
 
     // -- rest_call: status classification through an injected fake transport --
