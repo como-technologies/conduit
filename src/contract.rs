@@ -17,7 +17,7 @@ pub const EFFORT_LABELS: [&str; 5] = [
 pub const LABEL_RUN: &str = "conduit:run";
 pub const LABEL_FAILED: &str = "conduit:failed";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum EffortBucket {
     SuperQuick = 0,
     NotLong = 1,
@@ -86,6 +86,10 @@ pub fn body_trailer(reference: &str) -> String {
 }
 
 /// Body + blank line + trailer; the trailer is ALWAYS the final line.
+///
+/// Callers MUST NOT pre-include the trailer in `body` — the function does
+/// not deduplicate. Assemble bodies once, from source text without trailers;
+/// never round-trip a forge-fetched body back through this function.
 pub fn pr_body(reference: &str, body: &str) -> String {
     format!("{}\n\n{}", body.trim_end(), body_trailer(reference))
 }
