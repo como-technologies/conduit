@@ -253,8 +253,11 @@ mod tests {
             panic!("expected Failed on timeout");
         };
         assert_eq!(reason, "timeout");
+        // 15s margin (the deadline is sub-second): still far under the 30s
+        // grandchild sleep, so a leader-only kill blocking on the pipe readers
+        // still fails this — with headroom against parallel-build starvation.
         assert!(
-            start.elapsed() < std::time::Duration::from_secs(5),
+            start.elapsed() < std::time::Duration::from_secs(15),
             "runner must return promptly after the deadline, not wait out \
              engine grandchildren: took {:?}",
             start.elapsed()

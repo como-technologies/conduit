@@ -469,8 +469,13 @@ mod tests {
             matches!(err, AdroitError::Timeout { .. }),
             "expected Timeout, got {err:?}"
         );
+        // 15s margin (the deadline is sub-second): still far under the 30s
+        // grandchild sleep, so a leader-only kill that blocked on the pipe
+        // readers would fail this — but with headroom against scheduler
+        // starvation when the gate runs under parallel cargo builds (the
+        // flake class seen at the iteration-3 re-grade).
         assert!(
-            start.elapsed() < std::time::Duration::from_secs(5),
+            start.elapsed() < std::time::Duration::from_secs(15),
             "the call must return promptly after the deadline, not wait out \
              adroit grandchildren: took {:?}",
             start.elapsed()

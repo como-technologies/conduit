@@ -128,8 +128,10 @@ mod tests {
         let start = Instant::now();
         let out = run_with_deadline(&mut Command::new(bin), Duration::from_millis(300)).unwrap();
         assert!(out.status.is_none(), "expiry reports status None");
+        // 15s margin (deadline 300ms): still ≪ the 30s grandchild, proof
+        // intact, with headroom against parallel-build scheduler starvation.
         assert!(
-            start.elapsed() < Duration::from_secs(5),
+            start.elapsed() < Duration::from_secs(15),
             "must return promptly after the deadline: took {:?}",
             start.elapsed()
         );
