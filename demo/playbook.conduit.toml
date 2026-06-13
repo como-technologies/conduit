@@ -11,7 +11,7 @@ default = "gitea"
 [forge.gitea]
 base_url = "http://localhost:3000"
 owner = "como"
-repo = "playbook" # gitea-init.sh seeding: REPO_NAME=playbook SEED_REPO_DIR=../playbook
+repo = "@REPO_NAME@" # resolved by playbook-demo-init.sh from REPO_NAME (default "playbook")
 
 [engine]
 kind = "fake" # the deterministic demo engine; CONDUIT_ENGINE=claude-code for the encore

@@ -64,9 +64,13 @@ existing dir (unique per run; default `demo/runs/<UTC timestamp>`,
 gitignored), and stocks the workdir with everything `conduit` resolves from
 its cwd:
 
-- `conduit.toml` — `demo/playbook.conduit.toml` (the demo's exact,
-  fully-documented config: gitea `como/playbook`, fake engine, `[adroit]
-  dir` resolved to the playbook checkout's `src/adrs`)
+- `conduit.toml` — `demo/playbook.conduit.toml` with both placeholders
+  resolved: `[adroit] dir` → the playbook checkout's `src/adrs`, and the
+  forge `repo` → the `REPO_NAME` knob (default `playbook`, matching
+  `forge-up`/`demo-trigger`). Point the machinery at a different corpus
+  repo by setting `REPO_NAME` — no hand-edit of the generated config
+  (`tests/demo_init.rs` pins this). The rest of the config is explicit:
+  gitea `como/<REPO_NAME>`, fake engine.
 - `.secrets` — symlink to the repo's gitignored token dir
 - `.conduit/bin` — symlink to the pinned adroit install
 

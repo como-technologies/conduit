@@ -64,13 +64,20 @@ if [ ! -d "${PLAYBOOK_DIR:-}/src/adrs" ]; then
 fi
 ADRS="$(cd "$PLAYBOOK_DIR/src/adrs" && pwd)"
 
+# Forge repo name the demo seeds + drives. Knob (default "playbook") so the
+# machinery can target a non-playbook corpus repo without hand-editing the
+# generated conduit.toml — the third sighting of the hardcoded-target lesson
+# (gitea-init.sh / demo-trigger.sh already take REPO_NAME; this seam was missed).
+REPO_NAME="${REPO_NAME:-playbook}"
+
 if [ -e "$RUN_DIR" ]; then
   echo "ERROR: RUN_DIR=$RUN_DIR already exists — each run gets a fresh workdir" >&2
   exit 1
 fi
 mkdir -p "$RUN_DIR/.conduit"
 
-sed "s|@ADROIT_DIR@|$ADRS|" demo/playbook.conduit.toml >"$RUN_DIR/conduit.toml"
+sed -e "s|@ADROIT_DIR@|$ADRS|" -e "s|@REPO_NAME@|$REPO_NAME|" \
+  demo/playbook.conduit.toml >"$RUN_DIR/conduit.toml"
 # Symlinks, not copies: tokens stay in one gitignored place (and may be
 # re-minted by a later forge-up); the pinned adroit is shared read-only.
 ln -s "$ROOT/.secrets" "$RUN_DIR/.secrets"
