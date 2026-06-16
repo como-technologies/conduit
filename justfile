@@ -103,7 +103,7 @@ init-adroit:
 # Standalone, not a `ci` leg: CI is a fresh checkout and the pin lives in
 # gitignored .conduit/ — run after `just init-adroit`.
 adr-check:
-    .conduit/bin/adroit check --dir adr
+    .conduit/bin/adroit check --dir docs/adr
 
 # Scripted demo trigger: label the demo issue conduit:run as the reviewer (REPO_NAME selects the repo)
 demo-trigger:

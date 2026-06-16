@@ -269,19 +269,20 @@ from `${COMO_<REPO>_GIT:-${COMO_GIT_BASE:-https://github.com/como-technologies}/
 whose repo did not resolve says so and names the knobs). The pinned adroit
 installs via `just init-adroit` from `adroit.rev`.
 
-**The honest note.** Today none of the suite repos' remotes/tags have been
-published by the owner — nothing has ever been pushed — so on a fresh
-machine the clone-cache legs cannot serve yet and every leg needs sibling
-checkouts (or a local mirror via `COMO_GIT_BASE=file:///path/to/mirrors`).
-The day the owner publishes the repos and the adroit `v0.2.0` tag, the
-same commands resolve remotely with no kit change. What needs what:
+**The honest note.** The suite repos are now published — adroit (including its
+`v0.2.0` tag), tuesday, pulse, conduit, portfolio, and assessments all have a
+remote `main` — so on a fresh machine the clone-cache legs resolve remotely
+with no kit change. The one exception is **playbook**, which has no remote yet:
+its corpus leg still needs a sibling checkout (`COMO_PLAYBOOK_DIR`, or a
+`COMO_GIT_BASE=file:///path/to/mirrors` mirror) until the owner publishes it.
+What needs what:
 
-| Leg | Needs today | Resolves remotely once published |
-|---|---|---|
-| playbook corpus (hard) | sibling / `COMO_PLAYBOOK_DIR` / file:// base | yes |
-| adroit pin (`just init-adroit`) | sibling `../adroit` carrying the pinned rev | yes (rev-verified) |
-| pulse, assessments, tuesday (beats 1/2/5) | sibling checkouts | yes |
-| ollama `llama3.2` (only for `--live`) | local install, any machine | n/a — never remote |
+| Leg | Status today |
+|---|---|
+| playbook corpus (hard) | **not yet published** — sibling / `COMO_PLAYBOOK_DIR` / file:// base |
+| adroit pin (`just init-adroit`) | published — pinned rev + `v0.2.0` tag on the remote |
+| pulse, assessments, tuesday (beats 1/2/5) | published — resolve remotely |
+| ollama `llama3.2` (only for `--live`) | local install, any machine — never remote |
 
 Requirements: docker (the throwaway forge), rust toolchain + `just`, `jq`,
 `curl`; ollama with `llama3.2` only for the `--live` variants. The
