@@ -26,13 +26,13 @@ it is ever asked.
 EOF
 
 ASSESSMENTS="$(require_repo assessments)"
-BIN="$ASSESSMENTS/target/debug/assessments"
-[ -x "$BIN" ] || die "assessments binary missing — run demo/kit/demo-up"
+BIN="$ASSESSMENTS/target/debug/amaker"
+[ -x "$BIN" ] || die "amaker binary missing — run demo/kit/demo-up"
 
 if [ $LIVE = 1 ]; then
     require_ollama
     [ -f "$WORK/pulse-report.json" ] || die "beat 2 --live wants beat 1's pulse report as context — run beat-1-measure-prior first"
-    echo " RUN: assessments author --brief <client brief> --context <pulse report> --out assessment.yaml"
+    echo " RUN: amaker author --brief <client brief> --context <pulse report> --out assessment.yaml"
     echo "      (AI_PROVIDER=ollama, model $OLLAMA_MODEL — local only; this is the slow lane, ~6 min)"
     AI_PROVIDER=ollama OLLAMA_MODEL="$OLLAMA_MODEL" "$BIN" author \
         --brief "$ASSESSMENTS/examples/dogfood/brief.md" \
