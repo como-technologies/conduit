@@ -1,7 +1,7 @@
 # The exact conduit config the playbook-corpus demo runs with.
 # demo/playbook-demo-init.sh copies this into the per-run workdir as
 # conduit.toml, resolving the placeholder on the [adroit] dir line to the
-# absolute path of the playbook ADR corpus (PLAYBOOK_DIR/src/adrs).
+# absolute path of the playbook ADR corpus (PLAYBOOK_DIR/docs/src/adr).
 # Everything else is explicit so the demo's effective config is fully
 # documented here.
 
@@ -18,7 +18,7 @@ kind = "fake" # the deterministic demo engine; CONDUIT_ENGINE=claude-code for th
 timeout_secs = 900
 
 [adroit]
-dir = "@ADROIT_DIR@" # resolved by playbook-demo-init.sh -> <playbook>/src/adrs
+dir = "@ADROIT_DIR@" # resolved by playbook-demo-init.sh -> <playbook>/docs/src/adr
 # ai_provider/ai_model defaults are irrelevant to the demo path: the demo
 # plans an ADR that carries a STORED plan — a deterministic, provider-free
 # read; no AI env is needed.

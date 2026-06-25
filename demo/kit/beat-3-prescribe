@@ -72,7 +72,7 @@ if [ $LIVE = 1 ]; then
     PLAN_DIR="$SCRATCH" PLAN_ID=1
     PROVENANCE="generated seconds ago, persisted into the document"
 else
-    PLAN_DIR="$PLAYBOOK/src/adrs" PLAN_ID=5
+    PLAN_DIR="$PLAYBOOK/docs/src/adr" PLAN_ID=5
     PROVENANCE="generated + persisted by this pipeline on 2026-06-12 (--live replays it)"
 fi
 
@@ -96,5 +96,5 @@ evidence "corpus validity (adroit check)"
 
 echo
 echo " -> artifact for beat 4: the client corpus's accepted decision + stored plan"
-echo "    ($PLAYBOOK/src/adrs/accepted/, already seeded onto the demo forge)"
+echo "    ($PLAYBOOK/docs/src/adr/accepted/, already seeded onto the demo forge)"
 beat_end "beat-3-prescribe$([ $LIVE = 1 ] && echo ' (--live)' || echo ' (pre-baked)')"

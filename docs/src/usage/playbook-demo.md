@@ -65,7 +65,7 @@ gitignored), and stocks the workdir with everything `conduit` resolves from
 its cwd:
 
 - `conduit.toml` — `demo/playbook.conduit.toml` with both placeholders
-  resolved: `[adroit] dir` → the playbook checkout's `src/adrs`, and the
+  resolved: `[adroit] dir` → the playbook checkout's `docs/src/adr`, and the
   forge `repo` → the `REPO_NAME` knob (default `playbook`, matching
   `forge-up`/`demo-trigger`). Point the machinery at a different corpus
   repo by setting `REPO_NAME` — no hand-edit of the generated config
@@ -77,7 +77,7 @@ its cwd:
 Captured:
 
 ```text
-demo workdir ready: .../conduit/demo/runs/20260612T134927Z (adroit corpus: .../playbook/src/adrs)
+demo workdir ready: .../conduit/demo/runs/20260612T134927Z (adroit corpus: .../playbook/docs/src/adr)
 ```
 
 Task records, plan snapshots, cursors, the git cache, and engine workspaces
@@ -89,7 +89,7 @@ supported multi-repo answer per ADR-0011.)
 
 ```sh
 conduit init
-.conduit/bin/adroit --dir <playbook>/src/adrs list --status accepted -o json
+.conduit/bin/adroit --dir <playbook>/docs/src/adr list --status accepted -o json
 ```
 
 Four accepted generic decisions; ADR-0001 and ADR-0004 carry **stored**

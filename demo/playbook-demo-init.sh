@@ -20,7 +20,7 @@
 # Env:
 #   RUN_DIR       workdir to create (default demo/runs/<UTC timestamp>;
 #                 must not already exist — unique per run)
-#   PLAYBOOK_DIR  playbook checkout (must contain src/adrs). When unset, the
+#   PLAYBOOK_DIR  playbook checkout (must contain docs/src/adr). When unset, the
 #                 suite resolution convention applies: COMO_PLAYBOOK_DIR ->
 #                 sibling ../playbook -> the gitignored .como/deps/playbook
 #                 clone cache (COMO_PLAYBOOK_GIT / COMO_GIT_BASE; playbook
@@ -40,9 +40,9 @@ RUN_DIR="${RUN_DIR:-demo/runs/$(date -u +%Y%m%dT%H%M%SZ)}"
 # sibling -> clone cache -> hard error (the demo needs the corpus).
 PLAYBOOK_DIR="${PLAYBOOK_DIR:-${COMO_PLAYBOOK_DIR:-}}"
 if [ -z "$PLAYBOOK_DIR" ]; then
-  if [ -d ../playbook/src/adrs ]; then
+  if [ -d ../playbook/docs/src/adr ]; then
     PLAYBOOK_DIR=../playbook
-  elif [ -d .como/deps/playbook/src/adrs ]; then
+  elif [ -d .como/deps/playbook/docs/src/adr ]; then
     PLAYBOOK_DIR=.como/deps/playbook # populated cache, used as-is (never auto-fetched)
     echo "playbook-demo-init: NOTICE — using the clone cache $PLAYBOOK_DIR" >&2
   elif [ "${COMO_OFFLINE:-0}" != "1" ]; then
@@ -54,15 +54,15 @@ if [ -z "$PLAYBOOK_DIR" ]; then
     fi
   fi
 fi
-if [ ! -d "${PLAYBOOK_DIR:-}/src/adrs" ]; then
-  echo "ERROR: no playbook corpus found (need a checkout containing src/adrs)." >&2
+if [ ! -d "${PLAYBOOK_DIR:-}/docs/src/adr" ]; then
+  echo "ERROR: no playbook corpus found (need a checkout containing docs/src/adr)." >&2
   echo "  Knobs: PLAYBOOK_DIR or COMO_PLAYBOOK_DIR (a playbook checkout; sibling ../playbook is" >&2
   echo "  the default), or COMO_PLAYBOOK_GIT / COMO_GIT_BASE for the .como/deps/playbook clone cache." >&2
   echo "  Note: playbook has NO public remote yet — the clone leg needs a file:// base" >&2
   echo "  (e.g. COMO_GIT_BASE=file:///path/to/local/mirrors) until the owner pushes it." >&2
   exit 1
 fi
-ADRS="$(cd "$PLAYBOOK_DIR/src/adrs" && pwd)"
+ADRS="$(cd "$PLAYBOOK_DIR/docs/src/adr" && pwd)"
 
 # Forge repo name the demo seeds + drives. Knob (default "playbook") so the
 # machinery can target a non-playbook corpus repo without hand-editing the
