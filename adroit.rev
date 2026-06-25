@@ -1,6 +1,10 @@
 # Pinned adroit rev consumed by `just init-adroit`.
-# b57550ef: annotated tag v0.2.0 on adroit merged main (commit aade23bd) —
-#   stored plans, provenance, sanitizer + lint hardening (suite iteration 2).
-# Single pin advance per the iteration-2 referee (I10, conflict-1 ruling);
-# supersedes the plan-persistence pin f8547518.
-b57550efe41c55feb4d4ab005a5c208549955a27
+# 4416a06: published adroit `main` — the v0.2.0 line plus the post-v0.2.0
+#   hardening (per-rule sanitizer drop counts, num_ctx=8192, the bracket-
+#   placeholder lint rule) and the ADR-corpus relocation into docs/src/adr.
+#   Reachable on the adroit remote, so a cold clone resolves it with NO sibling.
+# Repointed from the unpushed local sha b57550ef (a pre-rebase commit that was
+#   never published; the released v0.2.0 tag is a different commit, 2d4ae70).
+#   init-adroit still falls back to a sibling ../adroit when the remote is
+#   unreachable (its HEAD, loudly, if it lacks this exact pin).
+4416a06a6e7b098272aefa5faf217fa0aea9f10e

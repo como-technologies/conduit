@@ -53,6 +53,16 @@ fn run_git<S: AsRef<std::ffi::OsStr>>(
             cmd.env(keep, v);
         }
     }
+    // conduit commits only to throwaway repos with the `conduit-bot` identity
+    // (never the user's), so it must NOT honor a contributor's global
+    // `commit.gpgsign = true`: no signing key for the bot exists, and signing a
+    // disposable commit is meaningless — it would only hard-fail the Adopt
+    // commit and the demo. Inject the override hermetically, same spirit as the
+    // env_clear above (HOME is kept so git still reads ~/.gitconfig). Honored by
+    // git >= 2.31; an older git ignores it and was never the signing case.
+    cmd.env("GIT_CONFIG_COUNT", "1");
+    cmd.env("GIT_CONFIG_KEY_0", "commit.gpgsign");
+    cmd.env("GIT_CONFIG_VALUE_0", "false");
     for (k, v) in envs {
         cmd.env(k, v);
     }
@@ -363,6 +373,11 @@ mod tests {
             .env("GIT_AUTHOR_EMAIL", "t@t")
             .env("GIT_COMMITTER_NAME", "t")
             .env("GIT_COMMITTER_EMAIL", "t@t")
+            // Disposable test repo: never sign — a contributor's global
+            // commit.gpgsign=true would hard-fail (no key for this identity).
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", "commit.gpgsign")
+            .env("GIT_CONFIG_VALUE_0", "false")
             .output()
             .unwrap();
         assert!(

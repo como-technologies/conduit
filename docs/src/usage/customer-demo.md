@@ -252,6 +252,7 @@ The customer's engineer can replay everything above from this repo:
 ```sh
 git clone <conduit> && cd conduit
 just init                      # toolchain + mdbook (rust, docker, jq required)
+demo/kit/preflight             # verify docker is up (+ pull llama3.2 for --live)
 demo/kit/demo-up               # resolves, builds, seeds, prints the menu
 demo/kit/beat-1-measure-prior
 demo/kit/beat-2-assess         # add --live to recompute on your ollama
@@ -280,10 +281,11 @@ What needs what:
 | Leg | Status today |
 |---|---|
 | playbook corpus (hard) | **not yet published** — sibling / `COMO_PLAYBOOK_DIR` / file:// base |
-| adroit pin (`just init-adroit`) | published — pinned rev + `v0.2.0` tag on the remote |
+| adroit pin (`just init-adroit`) | published — `adroit.rev` pins adroit `main`, reachable on the remote (cold clone needs no sibling) |
 | pulse, assessments, tuesday (beats 1/2/5) | published — resolve remotely |
 | ollama `llama3.2` (only for `--live`) | local install, any machine — never remote |
 
-Requirements: docker (the throwaway forge), rust toolchain + `just`, `jq`,
-`curl`; ollama with `llama3.2` only for the `--live` variants. The
-pre-baked fast path runs with no model installed at all.
+Requirements (run `demo/kit/preflight` to check them): docker with its daemon up
+(the throwaway forge), the rust toolchain + `just`, `jq`, `curl`; ollama with
+`llama3.2` only for the `--live` variants. The pre-baked fast path runs with no
+model installed at all.

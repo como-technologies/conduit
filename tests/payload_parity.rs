@@ -32,6 +32,11 @@ fn sh(dir: &Path, args: &[&str]) {
         .env("GIT_AUTHOR_EMAIL", "t@t")
         .env("GIT_COMMITTER_NAME", "t")
         .env("GIT_COMMITTER_EMAIL", "t@t")
+        // Disposable test repo: never sign — a contributor's global
+        // commit.gpgsign=true would hard-fail (no key for this identity).
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "commit.gpgsign")
+        .env("GIT_CONFIG_VALUE_0", "false")
         .output()
         .unwrap();
     assert!(

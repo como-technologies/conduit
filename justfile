@@ -88,12 +88,28 @@ init-adroit:
     if [ "$installed" != 1 ]; then
         if [ -d ../adroit/.git ] && [ -f ../adroit/Cargo.toml ]; then
             sib="file://$(realpath ../adroit)"
-            echo "init-adroit: falling back to the sibling checkout $sib — LOCAL-DEV OVERRIDE ONLY" >&2
-            cargo install --git "$sib" --rev "$rev" --locked --force --root .conduit adroit
+            if git -C ../adroit cat-file -e "$rev^{commit}" 2>/dev/null; then
+                # The sibling carries the pin: install exactly it (still local-dev,
+                # but byte-for-byte the pinned contract).
+                echo "init-adroit: falling back to the sibling checkout $sib at the pinned rev — LOCAL-DEV OVERRIDE ONLY" >&2
+                cargo install --git "$sib" --rev "$rev" --locked --force --root .conduit adroit
+            else
+                # Cold-checkout reality: neither the remote nor a fresh sibling
+                # clone carries the pin (it has not been pushed/tagged yet). Rather
+                # than hard-fail, install the sibling's HEAD so the demo can run —
+                # loudly, because this is NOT the pinned contract.
+                sib_head="$(git -C ../adroit rev-parse HEAD)"
+                echo "init-adroit: NOTICE — sibling ../adroit does not carry the pinned rev $rev" >&2
+                echo "  (it is unpushed/untagged here). Falling back to the sibling HEAD $sib_head" >&2
+                echo "  — LOCAL-DEV OVERRIDE ONLY, NOT the pinned contract. To make this reproducible," >&2
+                echo "  push/tag the pinned rev to the adroit remote, or bump adroit.rev to a reachable rev." >&2
+                cargo install --git "$sib" --rev "$sib_head" --locked --force --root .conduit adroit
+            fi
         else
             echo "init-adroit: ERROR — cannot resolve adroit at the pinned rev $rev." >&2
             echo "  Set COMO_ADROIT_GIT (full git URL) or COMO_GIT_BASE (https/ssh/file:// base) to a remote" >&2
-            echo "  carrying the rev, or provide a sibling checkout at ../adroit that contains it." >&2
+            echo "  carrying the rev, or provide a sibling checkout at ../adroit (its HEAD is used if it" >&2
+            echo "  does not carry the exact pin)." >&2
             exit 1
         fi
     fi
@@ -103,7 +119,7 @@ init-adroit:
 # Standalone, not a `ci` leg: CI is a fresh checkout and the pin lives in
 # gitignored .conduit/ — run after `just init-adroit`.
 adr-check:
-    .conduit/bin/adroit check --dir docs/adr
+    .conduit/bin/adroit check --dir docs/src/adr
 
 # Scripted demo trigger: label the demo issue conduit:run as the reviewer (REPO_NAME selects the repo)
 demo-trigger:

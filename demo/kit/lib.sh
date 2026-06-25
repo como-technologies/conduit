@@ -140,6 +140,21 @@ workdir() { # the active per-up workdir, or die pointing at demo-up
     echo "$dir"
 }
 
+# ── Docker (the throwaway forge runs in it) ──────────────────────────────────
+
+docker_ready() { docker info >/dev/null 2>&1; }
+
+# Fail fast, with guidance, BEFORE the expensive cross-repo builds — the forge
+# is step 4 of demo-up, so a down daemon must not waste minutes of cargo first.
+require_docker() {
+    command -v docker >/dev/null 2>&1 ||
+        die "docker is required for the demo forge but is not installed — run demo/kit/preflight for guidance"
+    docker compose version >/dev/null 2>&1 ||
+        die "the 'docker compose' plugin is required but unavailable — run demo/kit/preflight"
+    docker_ready ||
+        die "the docker daemon is not running — start it (sudo systemctl start docker, or Docker Desktop), then re-run (demo/kit/preflight verifies)"
+}
+
 forge_healthy() { curl -fsS "$FORGE_URL/api/healthz" >/dev/null 2>&1; }
 
 forge_repo_exists() { curl -fsS "$FORGE_API/repos/como/playbook" >/dev/null 2>&1; }

@@ -16,6 +16,9 @@ beat_start
 
 banner "DEMO-UP" "stand up the whole engagement demo"
 
+# ── 0. Fail fast on the one hard runtime prereq (docker), before any build ──
+require_docker
+
 # ── 1. Resolve the suite (ADR-0014 chain; provenance printed) ──────────────
 echo "[1/6] resolving cross-repo dependencies"
 PLAYBOOK="$(require_repo playbook)" # the fictional client's decision corpus

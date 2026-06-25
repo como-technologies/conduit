@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# preflight — verify (and, where safe, provision) the demo's runtime prereqs.
+#
+# The customer demo has exactly two runtime prerequisites beyond the Rust
+# toolchain the suite already assumes:
+#   - Docker, daemon up         REQUIRED — the throwaway Gitea forge runs in it.
+#   - ollama serving llama3.2    OPTIONAL — only the --live AI lanes need it;
+#                                the pre-baked fast path needs nothing.
+#
+# It NEVER installs system packages (too OS-specific and intrusive) — it
+# verifies and prints the exact command to run. The one thing it WILL provision,
+# because it is safe and in-tool, is `ollama pull <model>` when ollama is up but
+# the model is missing (auto on a TTY; force with --pull; skip with --no-pull).
+#
+# Resolve-or-skip, like the rest of the kit: a missing OPTIONAL prereq is a
+# notice, not a failure. Exit nonzero only when the REQUIRED one is absent.
+#
+# Standalone and idempotent. demo-up fails fast on docker on its own (require_docker);
+# run this first to also arm the --live lanes.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+PULL=auto
+for a in "$@"; do
+    case "$a" in
+        --pull) PULL=force ;;
+        --no-pull) PULL=never ;;
+        -h | --help)
+            echo "usage: demo/kit/preflight [--pull | --no-pull]"
+            echo "  --pull     pull the ollama model even off a TTY"
+            echo "  --no-pull  never pull (just report what's missing)"
+            exit 0
+            ;;
+        *) die "unknown flag $a (use --pull / --no-pull)" ;;
+    esac
+done
+
+banner "PREFLIGHT" "verify the demo's runtime prerequisites"
+fail=0
+
+# ── Docker (REQUIRED) ──────────────────────────────────────────────────────
+echo "[1/2] docker (required — the throwaway Gitea forge)"
+if ! command -v docker >/dev/null 2>&1; then
+    note "MISSING — docker is not installed. Install Docker Engine + the compose plugin:"
+    note "  https://docs.docker.com/engine/install/  (then: sudo usermod -aG docker \$USER)"
+    fail=1
+elif ! docker compose version >/dev/null 2>&1; then
+    note "MISSING — the 'docker compose' plugin is unavailable (the kit uses 'docker compose')."
+    note "  Install Compose v2: https://docs.docker.com/compose/install/"
+    fail=1
+elif ! docker_ready; then
+    note "DOWN — docker is installed but the daemon is unreachable. Start it:"
+    note "  sudo systemctl start docker     (or launch Docker Desktop)"
+    fail=1
+else
+    note "OK — docker $(docker version --format '{{.Server.Version}}' 2>/dev/null), daemon up, compose plugin present."
+fi
+
+# ── ollama + model (OPTIONAL — only --live needs it) ───────────────────────
+echo "[2/2] ollama '$OLLAMA_MODEL' (optional — only the --live AI lanes)"
+if ! command -v ollama >/dev/null 2>&1; then
+    note "absent — ollama is not installed; --live is unavailable (pre-baked needs nothing)."
+    note "  To enable --live: install ollama (https://ollama.com/download), then re-run preflight."
+elif ollama list 2>/dev/null | grep -q "$OLLAMA_MODEL"; then
+    note "OK — ollama serving '$OLLAMA_MODEL'; --live lanes available."
+else
+    # ollama is installed but the model is missing — the one safe auto-provision.
+    if [ "$PULL" = never ]; then
+        note "model '$OLLAMA_MODEL' not pulled (skipped: --no-pull). Run 'ollama pull $OLLAMA_MODEL' for --live."
+    elif [ "$PULL" = force ] || [ -t 1 ]; then
+        note "pulling '$OLLAMA_MODEL' (~2GB, one time) ..."
+        if ollama pull "$OLLAMA_MODEL"; then
+            note "OK — '$OLLAMA_MODEL' pulled; --live lanes available."
+        else
+            note "pull failed; --live stays unavailable (pre-baked works). Retry 'ollama pull $OLLAMA_MODEL'."
+        fi
+    else
+        note "model '$OLLAMA_MODEL' not pulled. Run 'ollama pull $OLLAMA_MODEL' (or 'preflight --pull') for --live."
+    fi
+fi
+
+echo
+if [ "$fail" = 0 ]; then
+    banner "PREFLIGHT OK" "docker ready — run demo/kit/demo-up"
+    exit 0
+else
+    banner "PREFLIGHT INCOMPLETE" "install/start the REQUIRED items above, then re-run"
+    exit 1
+fi
