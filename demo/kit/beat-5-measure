@@ -30,6 +30,7 @@ echo " RUN: tuesday-report --source gitea --owner como --repo playbook --monthly
 echo "      (= tuesday's own \`just dogfood-report playbook\`; token rides the env, never argv or git)"
 TUESDAY_GITEA_TOKEN="$(reviewer_token)" \
     "$TUESDAY/target/debug/tuesday-report" --source gitea --owner como \
+    --base-url "http://localhost:${FORGE_PORT:-3000}" \
     --repo playbook --year "$(date -u +%Y)" --month "$(date -u +%-m)" \
     --monthly-hours 160 -o json --strict >"$WORK/tuesday-report.json"
 echo "   exit code: 0 (strict mode satisfied)"

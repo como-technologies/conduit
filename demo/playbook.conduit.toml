@@ -9,7 +9,7 @@
 default = "gitea"
 
 [forge.gitea]
-base_url = "http://localhost:3000"
+base_url = "http://localhost:@FORGE_PORT@" # resolved by playbook-demo-init.sh from FORGE_PORT (default 3000)
 owner = "como"
 repo = "@REPO_NAME@" # resolved by playbook-demo-init.sh from REPO_NAME (default "playbook")
 

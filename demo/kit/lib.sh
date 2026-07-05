@@ -19,7 +19,7 @@ ROOT="$(cd "$KIT_DIR/../.." && pwd)" # the conduit repo root
 CONDUIT="$ROOT/target/debug/conduit"
 ADROIT="$ROOT/.conduit/bin/adroit"
 CURRENT_FILE="$KIT_DIR/.current" # gitignored pointer to the active workdir
-FORGE_URL="http://localhost:3000"
+FORGE_URL="http://localhost:${FORGE_PORT:-3000}"
 FORGE_API="$FORGE_URL/api/v1"
 
 # ── Presentation ───────────────────────────────────────────────────────────

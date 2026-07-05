@@ -36,7 +36,7 @@ just init-adroit # pinned adroit -> .conduit/bin (adroit.rev; remote URL
 just ci          # fmt-check + clippy + test + adr-check + book (the gate)
 just adr-check   # validate the in-repo docs/src/adr corpus with the pinned adroit
 just test        # all tests
-just forge-up    # throwaway Gitea on localhost:3000 (demo/)
+just forge-up    # throwaway Gitea on localhost:3000 (demo/; FORGE_PORT overrides the host port)
 just forge-down  # destroy it
 ```
 

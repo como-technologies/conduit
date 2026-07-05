@@ -60,7 +60,7 @@ if [ ! -d "$SEED_REPO_DIR/.git" ]; then
   fi
 fi
 COMPOSE=(docker compose -f demo/docker-compose.yml)
-BASE="http://localhost:3000"
+BASE="http://localhost:${FORGE_PORT:-3000}"
 API="$BASE/api/v1"
 
 # 1. Wait for the container to answer (60s budget).
@@ -158,7 +158,7 @@ api POST /orgs/como/repos \
 GIT_USERNAME=conduit-bot GIT_PASSWORD="$TOK" git -C "$SEED_REPO_DIR" \
   -c credential.helper= \
   -c 'credential.helper=!f() { echo "username=$GIT_USERNAME"; echo "password=$GIT_PASSWORD"; }; f' \
-  push -f "http://localhost:3000/como/$REPO_NAME.git" main:main
+  push -f "http://localhost:${FORGE_PORT:-3000}/como/$REPO_NAME.git" main:main
 
 # 6. The tuesday-contract labels (colors: bare hex, no '#').
 label() {

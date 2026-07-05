@@ -136,7 +136,7 @@ demo:
 conformance:
     cargo test --test conformance
 
-# Throwaway Gitea on localhost:3000 — two users, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize the seeding)
+# Throwaway Gitea on localhost:3000 (FORGE_PORT overrides the host port) — two users, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize the seeding)
 forge-up:
     docker compose -f demo/docker-compose.yml up -d
     bash demo/gitea-init.sh

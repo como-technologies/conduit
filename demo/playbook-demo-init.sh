@@ -77,6 +77,7 @@ fi
 mkdir -p "$RUN_DIR/.conduit"
 
 sed -e "s|@ADROIT_DIR@|$ADRS|" -e "s|@REPO_NAME@|$REPO_NAME|" \
+  -e "s|@FORGE_PORT@|${FORGE_PORT:-3000}|" \
   demo/playbook.conduit.toml >"$RUN_DIR/conduit.toml"
 # Symlinks, not copies: tokens stay in one gitignored place (and may be
 # re-minted by a later forge-up); the pinned adroit is shared read-only.

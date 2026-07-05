@@ -16,7 +16,7 @@ conduit/
 ├── CLAUDE.md              working agreements (no publishing, docs in mdbook, no client names)
 ├── docs/                  this mdbook
 ├── docs/src/adr/          conduit's OWN adroit corpus (ADR-0001..0016, all accepted; the suite's uniform corpus path)
-├── demo/docker-compose.yml  throwaway Gitea (localhost:3000, named volume, disposable)
+├── demo/docker-compose.yml  throwaway Gitea (localhost:3000, FORGE_PORT overrides; named volume, disposable)
 ├── demo/gitea-init.sh     two-user bootstrap, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize)
 ├── demo/demo-trigger.sh   scripted human gate: reviewer labels the issue conduit:run (REPO_NAME)
 ├── demo/playbook.conduit.toml   the documented config of the playbook-corpus demo
