@@ -19,8 +19,10 @@ talking_point <<'EOF'
 An assessment that used to take a consultant weeks is authored in minutes
 from the client's own brief — on a 3B model running on this laptop. The
 output is not slideware: it is schema-validated YAML with mechanical
-quality gates (degeneracy, dedupe, leakage). The prior period's pulse
-signals ride along as background context — the loop's return edge.
+quality gates (degeneracy, dedupe, leakage). The prior period's measured
+signals ride along as background context — the pulse report, plus
+tuesday's decision-attributed effort report once beat 5 has closed a
+period in this workdir. That is the loop's return edge.
 And the human gate: the client's architect reviews every question before
 it is ever asked.
 EOF
@@ -32,11 +34,21 @@ BIN="$ASSESSMENTS/target/debug/amaker"
 if [ $LIVE = 1 ]; then
     require_ollama
     [ -f "$WORK/pulse-report.json" ] || die "beat 2 --live wants beat 1's pulse report as context — run beat-1-measure-prior first"
-    echo " RUN: amaker author --brief <client brief> --context <pulse report> --out assessment.yaml"
+    # The loop's return edge, honestly: the pulse report always rides along;
+    # once beat 5 has closed a period in this workdir, its tuesday report
+    # (decision-attributed effort) is the second next-period input and rides
+    # along too. A first period has no tuesday report yet — that's not an error.
+    CONTEXT=(--context "$WORK/pulse-report.json")
+    CTX_DESC="pulse report"
+    if [ -f "$WORK/tuesday-report.json" ]; then
+        CONTEXT+=(--context "$WORK/tuesday-report.json")
+        CTX_DESC="pulse report + tuesday effort report"
+    fi
+    echo " RUN: amaker author --brief <client brief> --context <$CTX_DESC> --out assessment.yaml"
     echo "      (AI_PROVIDER=ollama, model $OLLAMA_MODEL — local only; this is the slow lane, ~6 min)"
     AI_PROVIDER=ollama OLLAMA_MODEL="$OLLAMA_MODEL" "$BIN" author \
         --brief "$ASSESSMENTS/examples/dogfood/brief.md" \
-        --context "$WORK/pulse-report.json" \
+        "${CONTEXT[@]}" \
         --out "$WORK/assessment.yaml"
 else
     echo " RUN: cp prebaked/assessment.yaml -> workdir   (then validate it LIVE)"

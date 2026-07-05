@@ -102,7 +102,9 @@ client's architect reviews every question before it is asked.
 assessment (authored 2026-06-12 by this same pipeline, 355.9s, zero
 retries) is copied in and **re-validated live**; the audience watches the
 gate pass, not a slide. `--live` recomputes the whole thing on ollama
-(~5.5 min) with the beat-1 pulse report as `--context`.
+(~5.5 min) with the beat-1 pulse report as `--context` — plus beat 5's
+tuesday effort report as a second `--context` once a prior period has
+closed in the same workdir (the loop's return edge).
 
 **The audience sees** (rehearsal 1 fast path):
 
