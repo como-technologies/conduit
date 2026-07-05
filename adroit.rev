@@ -1,10 +1,10 @@
 # Pinned adroit rev consumed by `just init-adroit`.
-# 4416a06: published adroit `main` — the v0.2.0 line plus the post-v0.2.0
-#   hardening (per-rule sanitizer drop counts, num_ctx=8192, the bracket-
-#   placeholder lint rule) and the ADR-corpus relocation into docs/src/adr.
-#   Reachable on the adroit remote, so a cold clone resolves it with NO sibling.
-# Repointed from the unpushed local sha b57550ef (a pre-rebase commit that was
-#   never published; the released v0.2.0 tag is a different commit, 2d4ae70).
-#   init-adroit still falls back to a sibling ../adroit when the remote is
-#   unreachable (its HEAD, loudly, if it lacks this exact pin).
-4416a06a6e7b098272aefa5faf217fa0aea9f10e
+# cc43754: published adroit `main` — the previous pin 4416a06 (the v0.2.0 line,
+#   post-v0.2.0 hardening, ADR-corpus relocation into docs/src/adr) plus the
+#   unsigned disposable-test-repo commits fix and the quinn-proto
+#   0.11.14 -> 0.11.15 bump (RUSTSEC-2026-0185) — so the pinned adroit no
+#   longer ships a known-advisory dep.
+#   Reachable on the adroit remote (main HEAD), so a cold clone resolves it
+#   with NO sibling. init-adroit still falls back to a sibling ../adroit when
+#   the remote is unreachable (its HEAD, loudly, if it lacks this exact pin).
+cc4375499059ee42b8e8fdba43c88c7ee9ab712d
