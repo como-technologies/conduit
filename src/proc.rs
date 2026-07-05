@@ -40,6 +40,34 @@ pub fn kill_group(child: &mut Child) {
     let _ = child.wait();
 }
 
+/// `ETXTBSY` raw OS error: the executable is still open for writing somewhere.
+const ETXTBSY: i32 = 26;
+/// Bounded retry budget for a transient `ETXTBSY` spawn failure.
+const SPAWN_ATTEMPTS: u32 = 10;
+const SPAWN_RETRY_DELAY: Duration = Duration::from_millis(20);
+
+/// Spawn `cmd`, retrying a transient `ETXTBSY` failure.
+///
+/// Classic Linux race: another thread's `fork` momentarily inherits the
+/// write fd of a freshly written executable before its `O_CLOEXEC` exec
+/// closes it, so `exec` of that file fails with `ETXTBSY` (parallel test
+/// threads writing per-test stub binaries hit exactly this). The window is
+/// transient by construction, so a short bounded retry at this single spawn
+/// choke point absorbs it; anything persistent still propagates as the
+/// original error.
+fn spawn_retrying(cmd: &mut Command) -> std::io::Result<Child> {
+    let mut attempt = 1;
+    loop {
+        match cmd.spawn() {
+            Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < SPAWN_ATTEMPTS => {
+                attempt += 1;
+                std::thread::sleep(SPAWN_RETRY_DELAY);
+            }
+            other => return other,
+        }
+    }
+}
+
 /// Run `cmd` to completion under `timeout`. Stdout/stderr are piped and
 /// drained on threads (a full pipe would deadlock the poll loop); the caller
 /// keeps ownership of stdin/env/cwd decisions on `cmd`. A spawn or wait
@@ -52,7 +80,7 @@ pub fn run_with_deadline(cmd: &mut Command, timeout: Duration) -> std::io::Resul
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    let mut child = cmd.spawn()?;
+    let mut child = spawn_retrying(cmd)?;
 
     let mut child_stdout = child.stdout.take().expect("stdout was piped");
     let mut child_stderr = child.stderr.take().expect("stderr was piped");
