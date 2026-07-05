@@ -2,8 +2,8 @@
 
 The spike's acceptance run, validated end-to-end against the throwaway forge
 on 2026-06-12. Every output below is real, captured from that run. The
-sequence: conduit reads its **own** accepted ADRs (the in-repo `adr/` corpus,
-authored with the pinned adroit) and drives work on its **own** repo via a
+sequence: conduit reads its **own** accepted ADRs (the in-repo `docs/src/adr`
+corpus, authored with the pinned adroit) and drives work on its **own** repo via a
 disposable localhost Gitea — the portfolio feeding itself. Humans hold every
 gate; here the human is scripted as the second Gitea user (`reviewer`).
 

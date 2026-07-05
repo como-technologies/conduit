@@ -34,7 +34,7 @@ just init        # toolchain components + mdbook
 just init-adroit # pinned adroit -> .conduit/bin (adroit.rev; remote URL
                  # via COMO_ADROIT_GIT/COMO_GIT_BASE, sibling file:// fallback)
 just ci          # fmt-check + clippy + test + book (the gate)
-just adr-check   # validate the in-repo adr/ corpus with the pinned adroit
+just adr-check   # validate the in-repo docs/src/adr corpus with the pinned adroit
 just test        # all tests
 just forge-up    # throwaway Gitea on localhost:3000 (demo/)
 just forge-down  # destroy it
@@ -46,7 +46,7 @@ packages the full TAPS engagement demo — narrated script:
 
 `adr-check` is standalone, not a `ci` leg: CI is a fresh checkout and the
 adroit pin lives in gitignored `.conduit/` — run it after `just init-adroit`
-(the demo does). The `adr/` corpus is authored ONLY with the pinned adroit
+(the demo does). The `docs/src/adr` corpus is authored ONLY with the pinned adroit
 (`new` / `edit` / `set-status` / `plan --save`), never by hand, and keeps
 adroit's forge integration disabled.
 

@@ -110,7 +110,7 @@ and provider-free) behind the same flag.
 just ci            # the full hermetic gate
 just test          # cargo test (all hermetic suites)
 just conformance   # the conformance suite only
-just adr-check     # validate the in-repo adr/ corpus (needs `just init-adroit`)
+just adr-check     # validate the in-repo docs/src/adr corpus (needs `just init-adroit`)
 
 # Env-gated live legs (each needs its prerequisite):
 just forge-up && CONDUIT_E2E_GITEA=1  cargo test --test conformance gitea_live

@@ -3,8 +3,8 @@
 One crate, `conduit` (`bin` + `lib`), fully synchronous — no tokio, no
 database, no framework. The binary is clap marshalling over a library whose
 core is pure functions and whose effects are funneled through one module.
-The founding decisions live in the in-repo `adr/` corpus (authored with the
-pinned adroit; see [Spike design](./spike-design.md)).
+The founding decisions live in the in-repo `docs/src/adr` corpus (authored
+with the pinned adroit; see [Spike design](./spike-design.md)).
 
 ## Module map
 
@@ -14,8 +14,8 @@ conduit/
 ├── adroit.rev             the single adroit pin location (read by `just init-adroit`)
 ├── justfile               init / init-adroit / ci / adr-check / forge-up / forge-down / demo-trigger / conformance
 ├── CLAUDE.md              working agreements (no publishing, docs in mdbook, no client names)
-├── adr/                   conduit's OWN adroit corpus (ADR-0001..0013, accepted: 7 founding + 6 retirement)
 ├── docs/                  this mdbook
+├── docs/src/adr/          conduit's OWN adroit corpus (ADR-0001..0016, all accepted; the suite's uniform corpus path)
 ├── demo/docker-compose.yml  throwaway Gitea (localhost:3000, named volume, disposable)
 ├── demo/gitea-init.sh     two-user bootstrap, labels, seeded repo (SEED_REPO_DIR/REPO_NAME parameterize)
 ├── demo/demo-trigger.sh   scripted human gate: reviewer labels the issue conduit:run (REPO_NAME)
