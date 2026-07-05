@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sweep: the audit job re-checks the lockfile against a fresh
+    # advisory DB even when no commit lands (a new RUSTSEC can turn an
+    # untouched main red).
+    - cron: "0 6 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Least privilege: CI only reads the repo (fmt/lint/test/book/audit, no
+# publishing). Applies to every job that doesn't set its own.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check, Lint, Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,mdbook
+
+      # fmt-check + clippy + tests + adr-check + book. The adr-check leg
+      # installs the pinned adroit (adroit.rev) from the adroit remote via
+      # `just init-adroit` — a fresh checkout resolves the pin with no sibling.
+      - name: CI
+        run: just ci
+
+  # Separate job on purpose: a freshly published advisory must not mask the
+  # code gates above (and vice versa).
+  audit:
+    name: Crate audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-audit
+
+      - name: Audit
+        run: just crate-audit

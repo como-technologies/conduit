@@ -5,10 +5,12 @@ default:
 # Install project toolchain components and tools
 init:
     rustup component add clippy rustfmt
-    cargo install mdbook
+    cargo install mdbook cargo-edit cargo-audit
 
-# Run all CI checks: format, lint, tests, book build (the house gate)
-ci: fmt-check lint test book
+# Run all CI checks: format, lint, tests, ADR corpus, book build (the house
+# gate). crate-audit is deliberately NOT a leg — it runs as a separate CI job
+# (plus a weekly schedule), so a fresh advisory can't mask the code gates.
+ci: fmt-check lint test adr-check book
 
 # Format code
 fmt:
@@ -115,10 +117,11 @@ init-adroit:
     fi
     .conduit/bin/adroit manifest -o json > /dev/null && echo "adroit handshake OK"
 
-# Validate conduit's own ADR corpus with the pinned adroit.
-# Standalone, not a `ci` leg: CI is a fresh checkout and the pin lives in
-# gitignored .conduit/ — run after `just init-adroit`.
-adr-check:
+# Validate conduit's own ADR corpus with the pinned adroit (a `ci` leg —
+# every suite repo's ci carries adr-check). Depends on init-adroit, which is
+# idempotent-fast once the pin is installed and resolves the pin from the
+# adroit remote on a fresh checkout (CI included).
+adr-check: init-adroit
     .conduit/bin/adroit check --dir docs/src/adr
 
 # Scripted demo trigger: label the demo issue conduit:run as the reviewer (REPO_NAME selects the repo)
@@ -141,6 +144,22 @@ forge-up:
 # Destroy the throwaway forge (container + volume — nothing survives)
 forge-down:
     docker compose -f demo/docker-compose.yml down -v
+
+# Upgrade dependencies (including incompatible versions)
+crate-upgrade:
+    cargo upgrade --incompatible
+
+# Update Cargo.lock to latest compatible versions
+crate-update:
+    cargo update
+
+# Audit dependencies for known vulnerabilities (skipped if cargo-audit isn't
+# installed; `just init` installs it and GitHub CI always runs it)
+crate-audit:
+    @if command -v cargo-audit >/dev/null 2>&1; then cargo audit; else echo "skip: cargo-audit not installed (run 'just init')"; fi
+
+# Upgrade deps, update lockfile, audit, and test
+crate-refresh: crate-upgrade crate-update crate-audit test
 
 # Build the user manual (mdbook)
 book:
