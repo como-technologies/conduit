@@ -19,7 +19,7 @@ fn repo_root() -> PathBuf {
 /// the script completes hermetically with no forge or adroit binary.
 fn run_init(tmp: &Path, repo_name: Option<&str>) -> PathBuf {
     let corpus = tmp.join("corpus");
-    std::fs::create_dir_all(corpus.join("src/adrs")).unwrap();
+    std::fs::create_dir_all(corpus.join("docs/src/adr")).unwrap();
     let run_dir = tmp.join("run"); // must NOT pre-exist; the script errors if it does
 
     let mut cmd = Command::new("bash");
@@ -69,7 +69,7 @@ fn generated_toml_still_resolves_the_corpus_dir() {
     let run_dir = run_init(tmp.path(), Some("anything"));
     let cfg = Config::load(&run_dir).expect("load generated conduit.toml");
     assert!(
-        cfg.adroit.dir.ends_with("src/adrs"),
+        cfg.adroit.dir.ends_with("docs/src/adr"),
         "adroit dir not resolved: {}",
         cfg.adroit.dir
     );
