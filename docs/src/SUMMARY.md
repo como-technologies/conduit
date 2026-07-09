@@ -16,3 +16,4 @@
 - [State machine](./dev/state-machine.md)
 - [Testing](./dev/testing.md)
 - [Post-spike follow-ups](./dev/follow-ups.md)
+- [GitHub live-mutation validation](./dev/github-live-validation.md)
