@@ -19,7 +19,7 @@ REPO="${GITHUB_VALIDATION_REPO:?set GITHUB_VALIDATION_REPO=owner/sacrificial-pri
 
 # Refuse the real suite repos outright — sacrificial means sacrificial.
 case "$REPO" in
-*/adroit|*/assessments|*/conduit|*/tuesday|*/pulse|*/portfolio|*/playbook|*/recipes)
+*/adroit|*/assessments|*/conduit|*/tuesday|*/pulse|*/portfolio|*/playbook|*/recipes|*/spectro-recipes)
     echo "REFUSED: $REPO is a real suite repo, not a sacrificial one" >&2; exit 2 ;;
 esac
 
